@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(timeout 10 node server.js)",
+      "Bash(npx vite:*)",
+      "Bash(node -e \":*)",
+      "Bash(taskkill //F //IM node.exe)"
+    ]
+  }
+}

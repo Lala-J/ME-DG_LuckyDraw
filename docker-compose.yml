@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: luckydraw-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend-data:/app/data
+      - backend-uploads:/app/uploads
+    environment:
+      - PORT=4000
+      - JWT_SECRET=luckydraw-secret-key-2026
+      - NODE_ENV=production
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: luckydraw-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:
+  backend-uploads:
