@@ -31,9 +31,11 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+  // All employees share a single corporate NAT IP, so this limit must account
+  // for the entire employee pool submitting at once (up to ~600/hr peak).
   const registrationLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 10,
+    max: 1000,
     message: { success: false, message: 'Too many registration attempts. Please try again later.' },
     standardHeaders: true,
     legacyHeaders: false
