@@ -8,6 +8,8 @@ export default function RegistrationConfig() {
   const navigate = useNavigate();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [endTime, setEndTime] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
   const [duration, setDuration] = useState('01:00:00');
   const [message, setMessage] = useState(null);
 
@@ -39,6 +41,7 @@ export default function RegistrationConfig() {
       if (res.ok) {
         const data = await res.json();
         setIsOpen(data.open);
+        setEndTime(data.open && data.endTime ? data.endTime : null);
       }
     } catch (err) {
       console.error('Failed to fetch status:', err);
@@ -79,6 +82,34 @@ export default function RegistrationConfig() {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
+  // Countdown tick: updates timeLeft every second and auto-closes when expired
+  useEffect(() => {
+    if (!isOpen || !endTime) {
+      setTimeLeft(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(0, Math.floor((new Date(endTime) - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining === 0) {
+        setIsOpen(false);
+        setEndTime(null);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, endTime]);
+
+  // Live-update registration table while registration is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      fetchRegistration(registrationPage, registrationSearch);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isOpen, registrationPage, registrationSearch, fetchRegistration]);
+
   useEffect(() => {
     const t = setTimeout(() => fetchValidation(validationPage, validationSearch), validationSearch ? 200 : 0);
     return () => clearTimeout(t);
@@ -97,6 +128,7 @@ export default function RegistrationConfig() {
       });
       if (res.ok) {
         setIsOpen(false);
+        setEndTime(null);
         setMessage({ type: 'success', text: 'Registration closed.' });
       }
     } catch (err) {
@@ -129,7 +161,9 @@ export default function RegistrationConfig() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setIsOpen(true);
+        setEndTime(data.endTime || null);
         setMessage({ type: 'success', text: 'Registration opened!' });
       } else {
         const data = await res.json();
@@ -284,6 +318,13 @@ export default function RegistrationConfig() {
       .catch(() => setMessage({ type: 'error', text: `Failed to download ${type} table.` }));
   };
 
+  const formatTimeLeft = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
   const totalValidationPages = Math.max(1, Math.ceil((validationData.total || 0) / LIMIT));
   const totalRegistrationPages = Math.max(1, Math.ceil((registrationData.total || 0) / LIMIT));
 
@@ -404,6 +445,11 @@ export default function RegistrationConfig() {
                   <span className="status-dot"></span>
                   {isOpen ? 'OPEN' : 'CLOSED'}
                 </span>
+                {isOpen && timeLeft !== null && (
+                  <span className="reg-countdown-timer">
+                    Closes in {formatTimeLeft(timeLeft)}
+                  </span>
+                )}
                 {isOpen && (
                   <button className="btn btn-danger btn-small" onClick={handleClose}>
                     Close Registration

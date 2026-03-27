@@ -157,7 +157,7 @@ registrationRouter.post('/', async (req, res) => {
         return { status: 400, body: { success: false, message: 'This Staff ID is already registered.' } };
       }
 
-      db.prepare('INSERT INTO registration_table (full_name, staff_id) VALUES (?, ?)').run(trimmedName, trimmedStaffId);
+      db.prepare('INSERT INTO registration_table (full_name, staff_id) VALUES (?, ?)').run(validationRow.full_name, trimmedStaffId);
       return { status: 200, body: { success: true, message: 'Registration successful!' } };
     });
 
