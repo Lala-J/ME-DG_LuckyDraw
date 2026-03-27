@@ -155,6 +155,48 @@ export default function LuckyDrawConfig() {
     }
   };
 
+  const handleResetLuckyDraw = async () => {
+    setMessage(null);
+    try {
+      const res = await fetch('/api/luckydraw/reset', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to reset');
+      }
+      setRounds([]);
+      setRoundsConfirmed(false);
+      setNumRounds(1);
+      setRunningRound(null);
+      setMessage({ type: 'success', text: 'Lucky Draw reset. All winners cleared.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleResetRound = async (index) => {
+    const round = rounds[index];
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/luckydraw/reset-round/${round.roundNumber}`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to reset round');
+      }
+      const updated = [...rounds];
+      updated[index] = { ...updated[index], executed: false, winners: [] };
+      setRounds(updated);
+      setMessage({ type: 'success', text: `Round ${round.roundNumber} reset. Ready to redraw.` });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    }
+  };
+
   const handleOpenStage = () => {
     window.open('/luckydraw-stage', 'LuckyDrawStage', 'width=1200,height=800');
   };
@@ -200,7 +242,18 @@ export default function LuckyDrawConfig() {
             <div className="rounds-config">
               {rounds.map((round, index) => (
                 <div key={round.roundNumber} className={`glass-card round-card ${round.executed ? 'round-executed' : ''}`}>
-                  <h3>Round {round.roundNumber}</h3>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3>Round {round.roundNumber}</h3>
+                    {round.executed && (
+                      <button
+                        className="btn btn-outline btn-small"
+                        onClick={() => handleResetRound(index)}
+                        disabled={runningRound !== null}
+                      >
+                        Redraw
+                      </button>
+                    )}
+                  </div>
 
                   <div className="round-controls">
                     <div className="form-group">
@@ -209,7 +262,7 @@ export default function LuckyDrawConfig() {
                         type="range"
                         className="form-range"
                         min="1"
-                        max={Math.max(1, remaining + (round.executed ? (round.winners || []).length : 0))}
+                        max={Math.min(15, Math.max(1, remaining + (round.executed ? (round.winners || []).length : 0)))}
                         value={round.winnerCount}
                         onChange={(e) => handleWinnerCountChange(index, e.target.value)}
                         disabled={round.executed}
@@ -245,9 +298,14 @@ export default function LuckyDrawConfig() {
                 </div>
               ))}
 
-              <button className="btn btn-accent btn-large stage-btn" onClick={handleOpenStage}>
-                STAGE LUCKY DRAW ROUNDS
-              </button>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                <button className="btn btn-accent btn-large stage-btn" onClick={handleOpenStage}>
+                  STAGE LUCKY DRAW ROUNDS
+                </button>
+                <button className="btn btn-danger" onClick={handleResetLuckyDraw}>
+                  Reset Lucky Draw
+                </button>
+              </div>
             </div>
           )}
         </div>

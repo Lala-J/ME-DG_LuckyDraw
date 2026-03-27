@@ -13,12 +13,14 @@ export default function HomeScreenConfig() {
   const [subtitleText, setSubtitleText] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [logoSize, setLogoSize] = useState(120);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
     setHeadingText(config.heading_text || '');
     setSubtitleText(config.subtitle_text || '');
+    setLogoSize(parseInt(config.logo_size) || 120);
     if (config.logo_filename) {
       setLogoPreview('/api/config/logo');
     }
@@ -46,7 +48,8 @@ export default function HomeScreenConfig() {
         },
         body: JSON.stringify({
           heading_text: headingText,
-          subtitle_text: subtitleText
+          subtitle_text: subtitleText,
+          logo_size: String(logoSize)
         })
       });
 
@@ -91,12 +94,13 @@ export default function HomeScreenConfig() {
           <form onSubmit={handleSave}>
             <div className="form-group">
               <label className="form-label">Heading Text</label>
-              <input
-                type="text"
+              <textarea
                 className="form-input"
+                rows={3}
                 value={headingText}
                 onChange={(e) => setHeadingText(e.target.value)}
-                placeholder="Enter heading text"
+                placeholder="Enter heading text (press Enter for a new line)"
+                style={{ resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
 
@@ -104,7 +108,7 @@ export default function HomeScreenConfig() {
               <label className="form-label">Logo</label>
               {logoPreview && (
                 <div className="logo-preview">
-                  <img src={logoPreview} alt="Logo preview" />
+                  <img src={logoPreview} alt="Logo preview" style={{ maxWidth: `${logoSize}px`, maxHeight: `${logoSize}px` }} />
                 </div>
               )}
               <input
@@ -112,6 +116,19 @@ export default function HomeScreenConfig() {
                 className="form-input form-file"
                 accept="image/*"
                 onChange={handleLogoChange}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Logo Display Size: {logoSize}px</label>
+              <input
+                type="range"
+                className="form-range"
+                min="40"
+                max="320"
+                step="10"
+                value={logoSize}
+                onChange={(e) => setLogoSize(parseInt(e.target.value))}
               />
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useConfig } from '../contexts/ConfigContext';
 
 export default function AnimatedBackground() {
@@ -9,17 +9,15 @@ export default function AnimatedBackground() {
   const color3 = config.bg_color3 || '#f093fb';
   const speed = config.bg_animation_speed || 8;
 
-  const style = useMemo(() => ({
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    zIndex: -1,
-    background: `linear-gradient(-45deg, ${color1}, ${color2}, ${color3}, ${color1})`,
-    backgroundSize: '400% 400%',
-    animation: `gradientShift ${speed}s ease infinite`
-  }), [color1, color2, color3, speed]);
-
-  return <div className="animated-background" style={style} />;
+  return (
+    <div
+      className="animated-background"
+      style={{
+        '--bg-color1': color1,
+        '--bg-color2': color2,
+        '--bg-color3': color3,
+        '--bg-speed': `${speed}s`
+      }}
+    />
+  );
 }

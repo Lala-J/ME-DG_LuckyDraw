@@ -76,7 +76,14 @@ export default function Home() {
         <div className="glass-card home-card">
           {config.logo_filename && (
             <div className="home-logo">
-              <img src="/api/config/logo" alt="Logo" />
+              <img
+                src="/api/config/logo"
+                alt="Logo"
+                style={{
+                  maxWidth: `${parseInt(config.logo_size) || 120}px`,
+                  maxHeight: `${parseInt(config.logo_size) || 120}px`
+                }}
+              />
             </div>
           )}
 

@@ -13,13 +13,23 @@ export default function RegistrationConfig() {
 
   const [validationData, setValidationData] = useState({ data: [], total: 0 });
   const [validationPage, setValidationPage] = useState(1);
+  const [validationSearch, setValidationSearch] = useState('');
 
   const [registrationData, setRegistrationData] = useState({ data: [], total: 0 });
   const [registrationPage, setRegistrationPage] = useState(1);
+  const [registrationSearch, setRegistrationSearch] = useState('');
 
   const [uploading, setUploading] = useState(false);
   const [copying, setCopying] = useState(false);
   const [starting, setStarting] = useState(false);
+
+  const [deleteValidationConfirm, setDeleteValidationConfirm] = useState(false);
+  const [deleteValidationPassword, setDeleteValidationPassword] = useState('');
+  const [deletingValidation, setDeletingValidation] = useState(false);
+
+  const [deleteRegistrationConfirm, setDeleteRegistrationConfirm] = useState(false);
+  const [deleteRegistrationPassword, setDeleteRegistrationPassword] = useState('');
+  const [deletingRegistration, setDeletingRegistration] = useState(false);
 
   const LIMIT = 100;
 
@@ -35,9 +45,11 @@ export default function RegistrationConfig() {
     }
   }, []);
 
-  const fetchValidation = useCallback(async (page) => {
+  const fetchValidation = useCallback(async (page, search = '') => {
     try {
-      const res = await fetch(`/api/validation/table?page=${page}&limit=${LIMIT}`, {
+      const params = new URLSearchParams({ page, limit: LIMIT });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/validation/table?${params}`, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
@@ -49,9 +61,11 @@ export default function RegistrationConfig() {
     }
   }, [getAuthHeaders]);
 
-  const fetchRegistration = useCallback(async (page) => {
+  const fetchRegistration = useCallback(async (page, search = '') => {
     try {
-      const res = await fetch(`/api/registration/table?page=${page}&limit=${LIMIT}`, {
+      const params = new URLSearchParams({ page, limit: LIMIT });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/registration/table?${params}`, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
@@ -64,8 +78,16 @@ export default function RegistrationConfig() {
   }, [getAuthHeaders]);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
-  useEffect(() => { fetchValidation(validationPage); }, [validationPage, fetchValidation]);
-  useEffect(() => { fetchRegistration(registrationPage); }, [registrationPage, fetchRegistration]);
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchValidation(validationPage, validationSearch), validationSearch ? 200 : 0);
+    return () => clearTimeout(t);
+  }, [validationPage, validationSearch, fetchValidation]);
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchRegistration(registrationPage, registrationSearch), registrationSearch ? 200 : 0);
+    return () => clearTimeout(t);
+  }, [registrationPage, registrationSearch, fetchRegistration]);
 
   const handleClose = async () => {
     try {
@@ -139,8 +161,9 @@ export default function RegistrationConfig() {
       if (res.ok) {
         const data = await res.json();
         setMessage({ type: 'success', text: `Validation table uploaded! ${data.count} entries loaded.` });
-        fetchValidation(1);
+        setValidationSearch('');
         setValidationPage(1);
+        fetchValidation(1, '');
       } else {
         const data = await res.json();
         throw new Error(data.error || 'Upload failed');
@@ -166,8 +189,8 @@ export default function RegistrationConfig() {
       if (res.ok) {
         const data = await res.json();
         setMessage({ type: 'success', text: `Copied ${data.inserted} of ${data.total} entries to registration table.` });
-        fetchRegistration(1);
         setRegistrationPage(1);
+        fetchRegistration(1, registrationSearch);
       } else {
         const data = await res.json();
         throw new Error(data.error || 'Copy failed');
@@ -176,6 +199,73 @@ export default function RegistrationConfig() {
       setMessage({ type: 'error', text: err.message });
     } finally {
       setCopying(false);
+    }
+  };
+
+  const handleDeleteValidation = async () => {
+    if (deletingValidation) return;
+    setDeletingValidation(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/validation/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ password: deleteValidationPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setMessage({ type: 'success', text: 'Validation table cleared.' });
+      setDeleteValidationConfirm(false);
+      setDeleteValidationPassword('');
+      setValidationSearch('');
+      setValidationPage(1);
+      fetchValidation(1, '');
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setDeletingValidation(false);
+    }
+  };
+
+  const handleDeleteRegistration = async () => {
+    if (deletingRegistration) return;
+    setDeletingRegistration(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/registration/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ password: deleteRegistrationPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setMessage({ type: 'success', text: 'Registration table cleared.' });
+      setDeleteRegistrationConfirm(false);
+      setDeleteRegistrationPassword('');
+      setRegistrationSearch('');
+      setRegistrationPage(1);
+      fetchRegistration(1, '');
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
+    } finally {
+      setDeletingRegistration(false);
+    }
+  };
+
+  const handleAddToRegistration = async (full_name, staff_id) => {
+    setMessage(null);
+    try {
+      const res = await fetch('/api/registration/add-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ full_name, staff_id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add entry');
+      setMessage({ type: 'success', text: `${full_name} added to registration.` });
+      fetchRegistration(registrationPage, registrationSearch);
+    } catch (err) {
+      setMessage({ type: 'error', text: err.message });
     }
   };
 
@@ -235,7 +325,7 @@ export default function RegistrationConfig() {
     );
   };
 
-  const renderTable = (rows, columns) => {
+  const renderTable = (rows, columns, startIndex = 0, onRowAction = null) => {
     if (!rows || rows.length === 0) {
       return <p className="empty-text">No data available.</p>;
     }
@@ -248,14 +338,27 @@ export default function RegistrationConfig() {
               {columns.map(col => (
                 <th key={col.key}>{col.label}</th>
               ))}
+              {onRowAction && <th></th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((row, idx) => (
               <tr key={idx}>
                 {columns.map(col => (
-                  <td key={col.key}>{row[col.key]}</td>
+                  <td key={col.key}>
+                    {col.key === 'id' ? startIndex + idx + 1 : row[col.key]}
+                  </td>
                 ))}
+                {onRowAction && (
+                  <td>
+                    <button
+                      className="btn btn-primary btn-small"
+                      onClick={() => onRowAction(row)}
+                    >
+                      Add
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -348,24 +451,90 @@ export default function RegistrationConfig() {
             <div className="table-section">
               <div className="table-header">
                 <h3>Validation Table</h3>
-                <button className="btn btn-outline btn-small" onClick={() => handleDownload('validation')}>
-                  Download
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-outline btn-small" onClick={() => handleDownload('validation')}>
+                    Download
+                  </button>
+                  <button className="btn btn-danger btn-small" onClick={() => { setDeleteValidationConfirm(true); setDeleteValidationPassword(''); }}>
+                    Delete Table
+                  </button>
+                </div>
               </div>
+              {deleteValidationConfirm && (
+                <div className="delete-confirm-box">
+                  <p>Enter admin password to delete all validation data:</p>
+                  <input
+                    type="password"
+                    className="form-input"
+                    value={deleteValidationPassword}
+                    onChange={(e) => setDeleteValidationPassword(e.target.value)}
+                    placeholder="Admin password"
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button className="btn btn-danger btn-small" onClick={handleDeleteValidation} disabled={deletingValidation || !deleteValidationPassword}>
+                      {deletingValidation ? 'Deleting...' : 'Confirm Delete'}
+                    </button>
+                    <button className="btn btn-outline btn-small" onClick={() => { setDeleteValidationConfirm(false); setDeleteValidationPassword(''); }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               <p className="table-count">Total: {validationData.total || 0}</p>
-              {renderTable(validationData.data, validationColumns)}
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search name or staff ID..."
+                value={validationSearch}
+                onChange={(e) => { setValidationSearch(e.target.value); setValidationPage(1); }}
+                style={{ marginBottom: '0.5rem' }}
+              />
+              {renderTable(validationData.data, validationColumns, (validationPage - 1) * LIMIT, (row) => handleAddToRegistration(row.full_name, row.staff_id))}
               {renderPagination(validationPage, totalValidationPages, setValidationPage)}
             </div>
 
             <div className="table-section">
               <div className="table-header">
                 <h3>Registration Table</h3>
-                <button className="btn btn-outline btn-small" onClick={() => handleDownload('registration')}>
-                  Download
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-outline btn-small" onClick={() => handleDownload('registration')}>
+                    Download
+                  </button>
+                  <button className="btn btn-danger btn-small" onClick={() => { setDeleteRegistrationConfirm(true); setDeleteRegistrationPassword(''); }}>
+                    Delete Table
+                  </button>
+                </div>
               </div>
+              {deleteRegistrationConfirm && (
+                <div className="delete-confirm-box">
+                  <p>Enter admin password to delete all registration data:</p>
+                  <input
+                    type="password"
+                    className="form-input"
+                    value={deleteRegistrationPassword}
+                    onChange={(e) => setDeleteRegistrationPassword(e.target.value)}
+                    placeholder="Admin password"
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <button className="btn btn-danger btn-small" onClick={handleDeleteRegistration} disabled={deletingRegistration || !deleteRegistrationPassword}>
+                      {deletingRegistration ? 'Deleting...' : 'Confirm Delete'}
+                    </button>
+                    <button className="btn btn-outline btn-small" onClick={() => { setDeleteRegistrationConfirm(false); setDeleteRegistrationPassword(''); }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               <p className="table-count">Total: {registrationData.total || 0}</p>
-              {renderTable(registrationData.data, registrationColumns)}
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search name or staff ID..."
+                value={registrationSearch}
+                onChange={(e) => { setRegistrationSearch(e.target.value); setRegistrationPage(1); }}
+                style={{ marginBottom: '0.5rem' }}
+              />
+              {renderTable(registrationData.data, registrationColumns, (registrationPage - 1) * LIMIT)}
               {renderPagination(registrationPage, totalRegistrationPages, setRegistrationPage)}
             </div>
           </div>

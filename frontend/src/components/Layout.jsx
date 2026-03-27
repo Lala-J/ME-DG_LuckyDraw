@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useConfig } from '../contexts/ConfigContext';
 import AnimatedBackground from './AnimatedBackground';
 
@@ -38,7 +39,9 @@ export default function Layout({ children }) {
         </main>
         {copyrightVisible && (
           <footer className="layout-footer">
-            &copy; 2026 - &infin; Metaelyon LLC
+            <Link to="/about" className="footer-link">
+              &copy; Metaelyon LLC &nbsp;|&nbsp; 2026 &ndash; For Eternity
+            </Link>
           </footer>
         )}
       </div>

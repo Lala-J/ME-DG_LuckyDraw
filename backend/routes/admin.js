@@ -28,12 +28,12 @@ router.post('/login', (req, res) => {
     const token = jwt.sign(
       { id: admin.id, username: admin.username },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '6h' }
     );
 
     res.json({ success: true, token });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -46,8 +46,8 @@ router.put('/password', auth, (req, res) => {
       return res.status(400).json({ error: 'Current password and new password are required' });
     }
 
-    if (newPassword.length < 4) {
-      return res.status(400).json({ error: 'New password must be at least 4 characters' });
+    if (newPassword.length < 12) {
+      return res.status(400).json({ error: 'New password must be at least 12 characters' });
     }
 
     const admin = db.prepare('SELECT * FROM admin WHERE id = 1').get();
@@ -65,7 +65,7 @@ router.put('/password', auth, (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -96,7 +96,9 @@ router.post('/wipe', auth, (req, res) => {
       db.prepare('DELETE FROM config').run();
       db.prepare('DELETE FROM admin').run();
 
-      const hash = bcrypt.hashSync('admin123', 10);
+      const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+      if (!defaultPassword) throw new Error('DEFAULT_ADMIN_PASSWORD environment variable is required');
+      const hash = bcrypt.hashSync(defaultPassword, 10);
       db.prepare('INSERT INTO admin (id, username, password_hash) VALUES (1, ?, ?)').run('admin', hash);
 
       const defaultConfig = {
@@ -122,7 +124,7 @@ router.post('/wipe', auth, (req, res) => {
     wipeAll();
     res.json({ success: true, message: 'All data wiped and defaults restored' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 

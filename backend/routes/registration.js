@@ -4,6 +4,7 @@ const validationRouter = express.Router();
 const multer = require('multer');
 const path = require('path');
 const XLSX = require('xlsx');
+const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
 
@@ -77,7 +78,7 @@ registrationRouter.get('/status', (req, res) => {
       registeredCount: countRow.cnt
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -99,7 +100,7 @@ registrationRouter.post('/open', auth, (req, res) => {
 
     res.json({ success: true, endTime });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -110,7 +111,7 @@ registrationRouter.post('/close', auth, (req, res) => {
     db.prepare("INSERT INTO config (key, value) VALUES ('registration_open', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -162,7 +163,7 @@ registrationRouter.post('/', async (req, res) => {
 
     res.status(result.status).json(result.body);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -173,9 +174,17 @@ registrationRouter.get('/table', auth, (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit) || 100));
     const offset = (page - 1) * limit;
+    const search = req.query.search ? req.query.search.trim() : '';
 
-    const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table').get();
-    const rows = db.prepare('SELECT * FROM registration_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
+    let totalRow, rows;
+    if (search) {
+      const like = `%${search}%`;
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ?').get(like, like);
+      rows = db.prepare('SELECT * FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, limit, offset);
+    } else {
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table').get();
+      rows = db.prepare('SELECT * FROM registration_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
+    }
 
     res.json({
       data: rows,
@@ -185,7 +194,7 @@ registrationRouter.get('/table', auth, (req, res) => {
       totalPages: Math.ceil(totalRow.cnt / limit)
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -210,7 +219,53 @@ registrationRouter.get('/download', auth, (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="registrations.xlsx"');
     res.send(buf);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// POST /api/registration/clear
+registrationRouter.post('/clear', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    const admin = db.prepare('SELECT * FROM admin WHERE id = 1').get();
+    if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    const clearTable = db.transaction(() => {
+      db.prepare('DELETE FROM lucky_draw_results').run();
+      db.prepare('DELETE FROM lucky_draw_rounds').run();
+      db.prepare("INSERT INTO config (key, value) VALUES ('lucky_draw_rounds', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+      db.prepare('DELETE FROM registration_table').run();
+      db.prepare("DELETE FROM sqlite_sequence WHERE name = 'registration_table'").run();
+    });
+    clearTable();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// POST /api/registration/add-entry
+registrationRouter.post('/add-entry', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const { full_name, staff_id } = req.body;
+    if (!full_name || !staff_id) {
+      return res.status(400).json({ error: 'Full name and staff ID are required' });
+    }
+    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id) VALUES (?, ?)').run(full_name.trim(), staff_id.trim());
+    if (result.changes === 0) {
+      return res.status(400).json({ error: 'Staff ID is already registered' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -223,9 +278,17 @@ validationRouter.get('/table', auth, (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit) || 100));
     const offset = (page - 1) * limit;
+    const search = req.query.search ? req.query.search.trim() : '';
 
-    const totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table').get();
-    const rows = db.prepare('SELECT * FROM validation_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
+    let totalRow, rows;
+    if (search) {
+      const like = `%${search}%`;
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ?').get(like, like);
+      rows = db.prepare('SELECT * FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, limit, offset);
+    } else {
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table').get();
+      rows = db.prepare('SELECT * FROM validation_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
+    }
 
     res.json({
       data: rows,
@@ -235,7 +298,7 @@ validationRouter.get('/table', auth, (req, res) => {
       totalPages: Math.ceil(totalRow.cnt / limit)
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -258,7 +321,7 @@ validationRouter.get('/download', auth, (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="validation.xlsx"');
     res.send(buf);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -297,6 +360,7 @@ validationRouter.post('/upload', auth, (req, res) => {
 
       const insertMany = db.transaction((rows) => {
         db.prepare('DELETE FROM validation_table').run();
+        db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
         const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id) VALUES (?, ?)');
         let insertedCount = 0;
         for (const row of rows) {
@@ -313,9 +377,34 @@ validationRouter.post('/upload', auth, (req, res) => {
       const count = insertMany(jsonData);
       res.json({ success: true, count });
     } catch (err2) {
-      res.status(500).json({ error: err2.message });
+      res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err2.message : 'Internal server error' });
     }
   });
+});
+
+// POST /api/validation/clear
+validationRouter.post('/clear', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    const admin = db.prepare('SELECT * FROM admin WHERE id = 1').get();
+    if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    const clearTable = db.transaction(() => {
+      db.prepare('DELETE FROM validation_table').run();
+      db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
+    });
+    clearTable();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
 });
 
 // POST /api/validation/to-registration
@@ -337,7 +426,7 @@ validationRouter.post('/to-registration', auth, (req, res) => {
     const inserted = copyAll(rows);
     res.json({ success: true, inserted, total: rows.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 

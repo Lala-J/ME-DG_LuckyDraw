@@ -5,6 +5,7 @@ import { ConfigProvider } from './contexts/ConfigContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Home from './pages/Home';
+import About from './pages/About';
 import Registration from './pages/Registration';
 import LuckyDrawStage from './pages/LuckyDrawStage';
 import Login from './pages/admin/Login';
@@ -39,6 +40,7 @@ export default function App() {
             <ProtectedRoute><MainConfig /></ProtectedRoute>
           } />
           <Route path="/luckydraw-stage" element={<LuckyDrawStage />} />
+          <Route path="/about" element={<About />} />
         </Routes>
       </ConfigProvider>
     </AuthProvider>

@@ -12,9 +12,13 @@ services:
     volumes:
       - backend-data:/app/data
       - backend-uploads:/app/uploads
+    env_file:
+      - .env
     environment:
       - PORT=4000
-      - JWT_SECRET=luckydraw-secret-key-2026
+      - JWT_SECRET=${JWT_SECRET}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - NODE_ENV=production
 
   frontend:

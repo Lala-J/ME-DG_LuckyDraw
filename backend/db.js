@@ -14,6 +14,7 @@ const DB_PATH = path.join(dataDir, 'luckydraw.db');
 class DatabaseWrapper {
   constructor(sqlDb) {
     this._db = sqlDb;
+    this._inTransaction = false;
   }
 
   _save() {
@@ -39,9 +40,11 @@ class DatabaseWrapper {
         }
         stmt.step();
         stmt.free();
-        wrapper._save();
-
         const changes = db.getRowsModified();
+        if (!wrapper._inTransaction) {
+          wrapper._save();
+        }
+
         return { changes };
       },
 
@@ -73,14 +76,17 @@ class DatabaseWrapper {
   transaction(fn) {
     const wrapper = this;
     return function (...args) {
+      wrapper._inTransaction = true;
       wrapper._db.run('BEGIN TRANSACTION');
       try {
         const result = fn(...args);
         wrapper._db.run('COMMIT');
+        wrapper._inTransaction = false;
         wrapper._save();
         return result;
       } catch (err) {
-        wrapper._db.run('ROLLBACK');
+        wrapper._inTransaction = false;
+        try { wrapper._db.run('ROLLBACK'); } catch (_) {}
         throw err;
       }
     };
@@ -155,7 +161,9 @@ async function initDatabase() {
   // Seed default admin if none exists
   const adminRow = db.prepare('SELECT COUNT(*) as cnt FROM admin').get();
   if (adminRow.cnt === 0) {
-    const hash = bcrypt.hashSync('admin123', 10);
+    const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+    if (!defaultPassword) throw new Error('DEFAULT_ADMIN_PASSWORD environment variable is required');
+    const hash = bcrypt.hashSync(defaultPassword, 10);
     db.prepare('INSERT INTO admin (id, username, password_hash) VALUES (1, ?, ?)').run('admin', hash);
   }
 
@@ -164,9 +172,10 @@ async function initDatabase() {
     heading_text: 'Lucky Draw',
     subtitle_text: '',
     logo_filename: '',
-    bg_color1: '#667eea',
-    bg_color2: '#764ba2',
-    bg_color3: '#f093fb',
+    logo_size: '120',
+    bg_color1: '#000000',
+    bg_color2: '#350160',
+    bg_color3: '#4d0f41',
     bg_animation_speed: '8',
     registration_open: '0',
     registration_end_time: '',

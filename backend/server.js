@@ -2,9 +2,12 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { initDatabase } = require('./db');
+
+const isDev = process.env.NODE_ENV !== 'production';
 
 async function startServer() {
   await initDatabase();
@@ -17,7 +20,13 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 4000;
 
-  app.use(cors());
+  app.use(helmet());
+
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:3000'];
+  app.use(cors({ origin: allowedOrigins }));
+
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -30,7 +39,16 @@ async function startServer() {
     legacyHeaders: false
   });
 
+  const adminLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many login attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
   app.use('/api/config', configRoutes);
+  app.post('/api/admin/login', adminLoginLimiter);
   app.use('/api/admin', adminRoutes);
   app.use('/api/luckydraw', luckyDrawRoutes);
 
@@ -38,8 +56,17 @@ async function startServer() {
   app.use('/api/registration', registrationRouter);
   app.use('/api/validation', validationRouter);
 
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Global error handler — never expose stack traces in production
+  // Express requires all 4 params to recognise this as an error handler
+  app.use((err, _req, res, _next) => {
+    console.error(err);
+    res.status(err.status || 500).json({
+      error: isDev ? err.message : 'Internal server error'
+    });
   });
 
   app.listen(PORT, '0.0.0.0', () => {

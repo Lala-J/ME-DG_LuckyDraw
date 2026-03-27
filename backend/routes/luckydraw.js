@@ -40,7 +40,7 @@ router.post('/configure', auth, (req, res) => {
     configure();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -76,7 +76,7 @@ router.get('/config', (req, res) => {
       rounds: roundsWithResults
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -147,7 +147,49 @@ router.post('/run/:roundNumber', auth, (req, res) => {
 
     res.json({ success: true, winners: resultWinners });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// POST /api/luckydraw/reset
+router.post('/reset', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const reset = db.transaction(() => {
+      db.prepare('DELETE FROM lucky_draw_results').run();
+      db.prepare('DELETE FROM lucky_draw_rounds').run();
+      db.prepare("UPDATE registration_table SET prize_winner_mark = ''").run();
+      db.prepare("INSERT INTO config (key, value) VALUES ('lucky_draw_rounds', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+    });
+    reset();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// POST /api/luckydraw/reset-round/:roundNumber
+router.post('/reset-round/:roundNumber', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const roundNumber = parseInt(req.params.roundNumber);
+    if (isNaN(roundNumber) || roundNumber < 1) {
+      return res.status(400).json({ error: 'Invalid round number' });
+    }
+    const round = db.prepare('SELECT * FROM lucky_draw_rounds WHERE round_number = ?').get(roundNumber);
+    if (!round) {
+      return res.status(404).json({ error: 'Round not found' });
+    }
+
+    const resetRound = db.transaction(() => {
+      db.prepare('DELETE FROM lucky_draw_results WHERE round_number = ?').run(roundNumber);
+      db.prepare("UPDATE registration_table SET prize_winner_mark = '' WHERE prize_winner_mark = ?").run(`R${roundNumber}`);
+      db.prepare('UPDATE lucky_draw_rounds SET executed = 0 WHERE round_number = ?').run(roundNumber);
+    });
+    resetRound();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 

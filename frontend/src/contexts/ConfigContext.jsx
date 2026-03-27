@@ -6,9 +6,9 @@ export function ConfigProvider({ children }) {
   const [config, setConfig] = useState({
     heading_text: 'Lucky Draw',
     subtitle_text: '',
-    bg_color1: '#667eea',
-    bg_color2: '#764ba2',
-    bg_color3: '#f093fb',
+    bg_color1: '#000000',
+    bg_color2: '#350160',
+    bg_color3: '#4d0f41',
     bg_animation_speed: 8,
     show_copyright: true
   });

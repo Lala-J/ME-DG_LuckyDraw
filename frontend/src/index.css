@@ -55,6 +55,9 @@ h1, h2, h3, h4, h5, h6 {
   width: 100vw;
   height: 100vh;
   z-index: -1;
+  background: linear-gradient(-45deg, var(--bg-color1, #667eea), var(--bg-color2, #764ba2), var(--bg-color3, #f093fb), var(--bg-color1, #667eea));
+  background-size: 400% 400%;
+  animation: gradientShift var(--bg-speed, 8s) ease infinite;
 }
 
 /* ========== Theme Classes (set by Layout based on luminance) ========== */
@@ -97,6 +100,16 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.9rem;
   opacity: 0.6;
   letter-spacing: 0.05em;
+}
+
+.footer-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  opacity: 0.85;
+  text-decoration: underline;
 }
 
 /* ========== Glass Card ========== */
@@ -404,12 +417,11 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 70vh;
 }
 
 .home-card {
   text-align: center;
-  max-width: 520px;
+  max-width: 720px;
   width: 100%;
   padding: 3rem 2.5rem;
 }
@@ -428,6 +440,7 @@ h1, h2, h3, h4, h5, h6 {
 .home-heading {
   font-size: 2.2rem;
   margin-bottom: 1.5rem;
+  white-space: pre-wrap;
 }
 
 .home-register-btn {
@@ -577,6 +590,8 @@ h1, h2, h3, h4, h5, h6 {
   cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
+  color: inherit;
+  background: inherit;
 }
 
 .theme-light-bg .dashboard-nav-card {
@@ -725,6 +740,19 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 1rem;
 }
 
+.delete-confirm-box {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.delete-confirm-box p {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
 .table-count {
   font-size: 0.85rem;
   opacity: 0.6;
@@ -769,6 +797,12 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid rgba(255,255,255,0.05);
   word-break: break-word;
+}
+
+.data-table td:first-child,
+.data-table th:first-child {
+  white-space: nowrap;
+  width: 1%;
 }
 
 .theme-light-bg .data-table td {

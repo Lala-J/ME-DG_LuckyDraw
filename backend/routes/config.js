@@ -48,7 +48,7 @@ router.get('/', (req, res) => {
     }
     res.json(config);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -68,7 +68,7 @@ router.put('/', auth, (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
@@ -99,7 +99,7 @@ router.post('/logo', auth, (req, res) => {
 
       res.json({ success: true, filename: req.file.filename });
     } catch (err2) {
-      res.status(500).json({ error: err2.message });
+      res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err2.message : 'Internal server error' });
     }
   });
 });
@@ -120,7 +120,7 @@ router.get('/logo', (req, res) => {
 
     res.sendFile(logoPath);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
 });
 
