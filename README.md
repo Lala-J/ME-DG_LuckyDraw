@@ -1,6 +1,6 @@
 # Metaelyon: Lucky Draw
 
-> **Metaelyon Lucky Draw** is a simple, web-based application created to handle a registration-powered, validation-based Lucky Draw system with features customised for an undisclosed event.
+> **Metaelyon Lucky Draw** is a simple, web-based application created to handle a registration-powered, validation-based Lucky Draw system with an array of nifty and customisable features.
 
 ---
 
@@ -57,7 +57,7 @@ No Node.js, npm, or any other tooling is required on the host — everything run
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Lala-J/ME-DG_LuckyDraw.git
 cd ME-DG_LuckyDraw
 ```
 
@@ -74,11 +74,11 @@ Then open `backend/.env` and set the three required variables:
 ```env
 # A cryptographically random secret used to sign JWT tokens.
 # Must be at least 32 characters. Generate one with the command below.
-JWT_SECRET=your-strong-random-secret-here
+JWT_SECRET=very-important-secret-dont-share-thanks
 
 # The password for the built-in admin account.
 # Set this before first launch — it is only applied when the database is first initialised.
-DEFAULT_ADMIN_PASSWORD=your-strong-admin-password-here
+DEFAULT_ADMIN_PASSWORD=very-important-password-dont-share-thanks
 
 # Comma-separated list of origins that are allowed to make API requests.
 # Set this to the URL(s) your users will access the site from.
@@ -113,7 +113,7 @@ curl http://localhost/api/health
 
 The application will be available at **http://localhost** (or your server's IP / domain).
 
-The admin panel is accessible at **/admin** — log in with the username `admin` and the password you set for `DEFAULT_ADMIN_PASSWORD`.
+The admin panel is accessible at **/administrator** — log in with the password you set for `DEFAULT_ADMIN_PASSWORD`.
 
 ---
 
