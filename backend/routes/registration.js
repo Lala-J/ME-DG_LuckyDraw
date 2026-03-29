@@ -52,6 +52,11 @@ function charSimilarity(a, b) {
   return matchSum / maxLen;
 }
 
+// Strip non-digit characters for phone number comparison
+function normalizePhone(p) {
+  return String(p || '').replace(/\D/g, '');
+}
+
 // GET /api/registration/status
 registrationRouter.get('/status', (req, res) => {
   try {
@@ -115,18 +120,22 @@ registrationRouter.post('/close', auth, (req, res) => {
   }
 });
 
-// POST /api/registration - register a user
+// POST /api/registration - register a user (manual entry: fullName + phoneNumber)
 registrationRouter.post('/', async (req, res) => {
   try {
     const result = await serializeWrite(() => {
       const db = getDb();
-      const { fullName, staffId } = req.body;
-      if (!fullName || !staffId) {
-        return { status: 400, body: { success: false, message: 'Full name and staff ID are required' } };
+      const { fullName, phoneNumber } = req.body;
+      if (!fullName || !phoneNumber) {
+        return { status: 400, body: { success: false, message: 'Full name and phone number are required' } };
       }
 
       const trimmedName = fullName.trim();
-      const trimmedStaffId = staffId.trim();
+      const inputPhone = normalizePhone(phoneNumber);
+
+      if (!inputPhone) {
+        return { status: 400, body: { success: false, message: 'Invalid phone number format' } };
+      }
 
       const openRow = db.prepare("SELECT value FROM config WHERE key = 'registration_open'").get();
       if (!openRow || openRow.value !== '1') {
@@ -142,22 +151,29 @@ registrationRouter.post('/', async (req, res) => {
         }
       }
 
-      const validationRow = db.prepare('SELECT * FROM validation_table WHERE staff_id = ?').get(trimmedStaffId);
+      // Look up by phone number in validation_table
+      const allValidationRows = db.prepare('SELECT * FROM validation_table').all();
+      const validationRow = allValidationRows.find(r => normalizePhone(r.phone_number) === inputPhone);
+
       if (!validationRow) {
-        return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Staff ID.' } };
+        return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
 
       const similarity = charSimilarity(trimmedName, validationRow.full_name);
-      if (similarity < 0.5) {
-        return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Staff ID.' } };
+      if (similarity < 0.85) {
+        return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
 
-      const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(trimmedStaffId);
+      const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(validationRow.staff_id);
       if (existing) {
-        return { status: 400, body: { success: false, message: 'This Staff ID is already registered.' } };
+        return { status: 400, body: { success: false, message: 'This phone number is already registered.' } };
       }
 
-      db.prepare('INSERT INTO registration_table (full_name, staff_id) VALUES (?, ?)').run(validationRow.full_name, trimmedStaffId);
+      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
+        validationRow.full_name,
+        validationRow.staff_id,
+        validationRow.phone_number
+      );
       return { status: 200, body: { success: true, message: 'Registration successful!' } };
     });
 
@@ -179,8 +195,8 @@ registrationRouter.get('/table', auth, (req, res) => {
     let totalRow, rows;
     if (search) {
       const like = `%${search}%`;
-      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ?').get(like, like);
-      rows = db.prepare('SELECT * FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, limit, offset);
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ?').get(like, like, like);
+      rows = db.prepare('SELECT * FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, limit, offset);
     } else {
       totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table').get();
       rows = db.prepare('SELECT * FROM registration_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
@@ -202,14 +218,15 @@ registrationRouter.get('/table', auth, (req, res) => {
 registrationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, prize_winner_mark, registered_at FROM registration_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, prize_winner_mark, registered_at FROM registration_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id', 'prize_winner_mark', 'registered_at']
+      header: ['full_name', 'staff_id', 'phone_number', 'prize_winner_mark', 'registered_at']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
-    ws['C1'] = { v: 'Prize Winner', t: 's' };
-    ws['D1'] = { v: 'Registered At', t: 's' };
+    ws['C1'] = { v: 'Phone Number', t: 's' };
+    ws['D1'] = { v: 'Prize Winner', t: 's' };
+    ws['E1'] = { v: 'Registered At', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
@@ -255,11 +272,15 @@ registrationRouter.post('/clear', auth, (req, res) => {
 registrationRouter.post('/add-entry', auth, (req, res) => {
   try {
     const db = getDb();
-    const { full_name, staff_id } = req.body;
+    const { full_name, staff_id, phone_number } = req.body;
     if (!full_name || !staff_id) {
       return res.status(400).json({ error: 'Full name and staff ID are required' });
     }
-    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id) VALUES (?, ?)').run(full_name.trim(), staff_id.trim());
+    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
+      full_name.trim(),
+      staff_id.trim(),
+      (phone_number || '').trim()
+    );
     if (result.changes === 0) {
       return res.status(400).json({ error: 'Staff ID is already registered' });
     }
@@ -283,8 +304,8 @@ validationRouter.get('/table', auth, (req, res) => {
     let totalRow, rows;
     if (search) {
       const like = `%${search}%`;
-      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ?').get(like, like);
-      rows = db.prepare('SELECT * FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, limit, offset);
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ?').get(like, like, like);
+      rows = db.prepare('SELECT * FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, limit, offset);
     } else {
       totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table').get();
       rows = db.prepare('SELECT * FROM validation_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
@@ -306,12 +327,13 @@ validationRouter.get('/table', auth, (req, res) => {
 validationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id FROM validation_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number FROM validation_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id']
+      header: ['full_name', 'staff_id', 'phone_number']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
+    ws['C1'] = { v: 'Phone Number', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Validation');
@@ -348,26 +370,39 @@ validationRouter.post('/upload', auth, (req, res) => {
 
       const firstRow = jsonData[0];
       const keys = Object.keys(firstRow);
+
+      // Detect Full Name column
       let nameCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'fullname');
-      let idCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'staffid');
-
       if (!nameCol) nameCol = keys.find(k => k.toLowerCase().includes('name'));
-      if (!idCol) idCol = keys.find(k => k.toLowerCase().includes('staff') || k.toLowerCase().includes('id'));
 
-      if (!nameCol || !idCol) {
-        return res.status(400).json({ error: 'Excel must have "Full Name" and "Staff ID" columns. Found: ' + keys.join(', ') });
+      // Detect Staff ID column
+      let idCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'staffid');
+      if (!idCol) idCol = keys.find(k => k.toLowerCase().includes('staff'));
+      if (!idCol) idCol = keys.find(k => k.toLowerCase() === 'id');
+
+      // Detect Phone Number column
+      let phoneCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'phonenumber');
+      if (!phoneCol) phoneCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'mobilephonenumber');
+      if (!phoneCol) phoneCol = keys.find(k => k.toLowerCase().includes('phone'));
+      if (!phoneCol) phoneCol = keys.find(k => k.toLowerCase().includes('mobile'));
+
+      if (!nameCol || !idCol || !phoneCol) {
+        return res.status(400).json({
+          error: 'Excel must have "Full Name", "Staff ID", and "Phone Number" columns. Found: ' + keys.join(', ')
+        });
       }
 
       const insertMany = db.transaction((rows) => {
         db.prepare('DELETE FROM validation_table').run();
         db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
-        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id) VALUES (?, ?)');
+        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)');
         let insertedCount = 0;
         for (const row of rows) {
           const name = String(row[nameCol]).trim();
           const sid = String(row[idCol]).trim();
+          const phone = String(row[phoneCol]).trim();
           if (name && sid) {
-            insert.run(name, sid);
+            insert.run(name, sid, phone);
             insertedCount++;
           }
         }
@@ -411,13 +446,13 @@ validationRouter.post('/clear', auth, (req, res) => {
 validationRouter.post('/to-registration', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id FROM validation_table').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number FROM validation_table').all();
 
     const copyAll = db.transaction((entries) => {
-      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id) VALUES (?, ?)');
+      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)');
       let inserted = 0;
       for (const row of entries) {
-        const result = insert.run(row.full_name, row.staff_id);
+        const result = insert.run(row.full_name, row.staff_id, row.phone_number || '');
         if (result.changes > 0) inserted++;
       }
       return inserted;
@@ -430,4 +465,4 @@ validationRouter.post('/to-registration', auth, (req, res) => {
   }
 });
 
-module.exports = { registrationRouter, validationRouter };
+module.exports = { registrationRouter, validationRouter, charSimilarity, normalizePhone };

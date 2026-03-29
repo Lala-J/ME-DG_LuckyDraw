@@ -132,13 +132,15 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS validation_table (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       full_name TEXT NOT NULL,
-      staff_id TEXT NOT NULL
+      staff_id TEXT NOT NULL,
+      phone_number TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS registration_table (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       full_name TEXT NOT NULL,
       staff_id TEXT NOT NULL UNIQUE,
+      phone_number TEXT NOT NULL DEFAULT '',
       prize_winner_mark TEXT DEFAULT '',
       registered_at TEXT DEFAULT (datetime('now'))
     );
@@ -155,6 +157,20 @@ async function initDatabase() {
       registration_id INTEGER NOT NULL,
       full_name TEXT NOT NULL,
       staff_id TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS prizes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prize_id TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      picture_filename TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS lucky_draw_round_prizes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      round_number INTEGER NOT NULL,
+      prize_id TEXT NOT NULL,
+      UNIQUE(prize_id)
     );
   `);
 
@@ -180,12 +196,35 @@ async function initDatabase() {
     registration_open: '0',
     registration_end_time: '',
     copyright_visible: '1',
-    lucky_draw_rounds: '0'
+    lucky_draw_rounds: '0',
+    organisation: ''
   };
 
   const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
   for (const [key, value] of Object.entries(defaultConfig)) {
     insertConfig.run(key, value);
+  }
+
+  // Migrations: add phone_number column to existing tables if absent
+  const validationCols = db.prepare('PRAGMA table_info(validation_table)').all();
+  if (!validationCols.find(c => c.name === 'phone_number')) {
+    db.exec("ALTER TABLE validation_table ADD COLUMN phone_number TEXT NOT NULL DEFAULT ''");
+  }
+  const registrationCols = db.prepare('PRAGMA table_info(registration_table)').all();
+  if (!registrationCols.find(c => c.name === 'phone_number')) {
+    db.exec("ALTER TABLE registration_table ADD COLUMN phone_number TEXT NOT NULL DEFAULT ''");
+  }
+
+  // Migrations: add custom_name to lucky_draw_rounds
+  const roundCols = db.prepare('PRAGMA table_info(lucky_draw_rounds)').all();
+  if (!roundCols.find(c => c.name === 'custom_name')) {
+    db.exec("ALTER TABLE lucky_draw_rounds ADD COLUMN custom_name TEXT DEFAULT ''");
+  }
+
+  // Migrations: add prize_id to lucky_draw_results
+  const resultCols = db.prepare('PRAGMA table_info(lucky_draw_results)').all();
+  if (!resultCols.find(c => c.name === 'prize_id')) {
+    db.exec("ALTER TABLE lucky_draw_results ADD COLUMN prize_id TEXT DEFAULT ''");
   }
 
   return db;

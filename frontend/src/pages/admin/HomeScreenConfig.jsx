@@ -11,6 +11,7 @@ export default function HomeScreenConfig() {
 
   const [headingText, setHeadingText] = useState('');
   const [subtitleText, setSubtitleText] = useState('');
+  const [organisation, setOrganisation] = useState('');
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [logoSize, setLogoSize] = useState(120);
@@ -20,6 +21,7 @@ export default function HomeScreenConfig() {
   useEffect(() => {
     setHeadingText(config.heading_text || '');
     setSubtitleText(config.subtitle_text || '');
+    setOrganisation(config.organisation || '');
     setLogoSize(parseInt(config.logo_size) || 120);
     if (config.logo_filename) {
       setLogoPreview('/api/config/logo');
@@ -49,7 +51,8 @@ export default function HomeScreenConfig() {
         body: JSON.stringify({
           heading_text: headingText,
           subtitle_text: subtitleText,
-          logo_size: String(logoSize)
+          logo_size: String(logoSize),
+          organisation: organisation
         })
       });
 
@@ -130,6 +133,20 @@ export default function HomeScreenConfig() {
                 value={logoSize}
                 onChange={(e) => setLogoSize(parseInt(e.target.value))}
               />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Organisation</label>
+              <input
+                type="text"
+                className="form-input"
+                value={organisation}
+                onChange={(e) => setOrganisation(e.target.value)}
+                placeholder="e.g. Metaelyon (used in registration page subtitle)"
+              />
+              <p className="form-hint">
+                Shown in the Registration page as: &ldquo;Ensure your Phone Number is the same phone number provided to <strong>{organisation || 'UNDEFINED'}</strong>.&rdquo;
+              </p>
             </div>
 
             <div className="form-group">

@@ -16,6 +16,8 @@ async function startServer() {
   const { registrationRouter, validationRouter } = require('./routes/registration');
   const adminRoutes = require('./routes/admin');
   const luckyDrawRoutes = require('./routes/luckydraw');
+  const prizeRoutes = require('./routes/prizes');
+  const authRoutes = require('./routes/auth');
 
   const app = express();
   const PORT = process.env.PORT || 4000;
@@ -29,7 +31,6 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // All employees share a single corporate NAT IP, so this limit must account
   // for the entire employee pool submitting at once (up to ~600/hr peak).
@@ -52,7 +53,9 @@ async function startServer() {
   app.use('/api/config', configRoutes);
   app.post('/api/admin/login', adminLoginLimiter);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/auth', authRoutes);
   app.use('/api/luckydraw', luckyDrawRoutes);
+  app.use('/api/prizes', prizeRoutes);
 
   app.post('/api/registration', registrationLimiter);
   app.use('/api/registration', registrationRouter);

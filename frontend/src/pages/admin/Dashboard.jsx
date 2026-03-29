@@ -5,8 +5,10 @@ import Layout from '../../components/Layout';
 const navItems = [
   { label: 'Home Screen Master', path: '/administrator/homescreenconfig', icon: '\u2302' },
   { label: 'Registration Master', path: '/administrator/registrationconfig', icon: '\u2611' },
-  { label: 'Lucky Draw', path: '/administrator/luckydrawconfig', icon: '\u2605' },
-  { label: 'Site Master', path: '/administrator/mainconfig', icon: '\u2699' }
+  { label: 'Lucky Draw Master', path: '/administrator/luckydrawconfig', icon: '\u2605' },
+  { label: 'Website Master', path: '/administrator/mainconfig', icon: '\u2699' },
+  { label: 'Experimental Features', path: '/administrator/experimentals', icon: '\u2697' },
+  { label: 'Audit Logs', path: '/administrator/auditlogs', icon: '\u270E' }
 ];
 
 export default function Dashboard() {

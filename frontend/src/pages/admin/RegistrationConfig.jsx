@@ -286,13 +286,13 @@ export default function RegistrationConfig() {
     }
   };
 
-  const handleAddToRegistration = async (full_name, staff_id) => {
+  const handleAddToRegistration = async (full_name, staff_id, phone_number) => {
     setMessage(null);
     try {
       const res = await fetch('/api/registration/add-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ full_name, staff_id })
+        body: JSON.stringify({ full_name, staff_id, phone_number: phone_number || '' })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add entry');
@@ -411,13 +411,15 @@ export default function RegistrationConfig() {
   const validationColumns = [
     { key: 'id', label: '#' },
     { key: 'full_name', label: 'Full Name' },
-    { key: 'staff_id', label: 'Staff ID' }
+    { key: 'staff_id', label: 'Staff ID' },
+    { key: 'phone_number', label: 'Phone Number' }
   ];
 
   const registrationColumns = [
     { key: 'id', label: '#' },
     { key: 'full_name', label: 'Full Name' },
     { key: 'staff_id', label: 'Staff ID' },
+    { key: 'phone_number', label: 'Phone Number' },
     { key: 'prize_winner_mark', label: 'Prize' },
     { key: 'registered_at', label: 'Registered' }
   ];
@@ -425,7 +427,7 @@ export default function RegistrationConfig() {
   return (
     <Layout>
       <div className="admin-page">
-        <div className="glass-card admin-form-card wide-card">
+        <div className="glass-card admin-form-card">
           <div className="admin-header">
             <button className="btn btn-outline btn-small" onClick={() => navigate('/administrator/dashboard')}>
               &larr; Back
@@ -530,12 +532,12 @@ export default function RegistrationConfig() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search name or staff ID..."
+                placeholder="Search name, staff ID or phone..."
                 value={validationSearch}
                 onChange={(e) => { setValidationSearch(e.target.value); setValidationPage(1); }}
                 style={{ marginBottom: '0.5rem' }}
               />
-              {renderTable(validationData.data, validationColumns, (validationPage - 1) * LIMIT, (row) => handleAddToRegistration(row.full_name, row.staff_id))}
+              {renderTable(validationData.data, validationColumns, (validationPage - 1) * LIMIT, (row) => handleAddToRegistration(row.full_name, row.staff_id, row.phone_number))}
               {renderPagination(validationPage, totalValidationPages, setValidationPage)}
             </div>
 
@@ -575,7 +577,7 @@ export default function RegistrationConfig() {
               <input
                 type="text"
                 className="form-input"
-                placeholder="Search name or staff ID..."
+                placeholder="Search name, staff ID or phone..."
                 value={registrationSearch}
                 onChange={(e) => { setRegistrationSearch(e.target.value); setRegistrationPage(1); }}
                 style={{ marginBottom: '0.5rem' }}

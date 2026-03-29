@@ -14,6 +14,8 @@ import HomeScreenConfig from './pages/admin/HomeScreenConfig';
 import RegistrationConfig from './pages/admin/RegistrationConfig';
 import LuckyDrawConfig from './pages/admin/LuckyDrawConfig';
 import MainConfig from './pages/admin/MainConfig';
+import Experimentals from './pages/admin/Experimentals';
+import AuditLogs from './pages/admin/AuditLogs';
 
 export default function App() {
   return (
@@ -39,7 +41,15 @@ export default function App() {
           <Route path="/administrator/mainconfig" element={
             <ProtectedRoute><MainConfig /></ProtectedRoute>
           } />
-          <Route path="/luckydraw-stage" element={<LuckyDrawStage />} />
+          <Route path="/administrator/experimentals" element={
+            <ProtectedRoute><Experimentals /></ProtectedRoute>
+          } />
+          <Route path="/administrator/auditlogs" element={
+            <ProtectedRoute><AuditLogs /></ProtectedRoute>
+          } />
+          <Route path="/luckydraw-stage" element={
+            <ProtectedRoute><LuckyDrawStage /></ProtectedRoute>
+          } />
           <Route path="/about" element={<About />} />
         </Routes>
       </ConfigProvider>
