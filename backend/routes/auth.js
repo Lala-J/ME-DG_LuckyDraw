@@ -6,14 +6,9 @@ const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const { charSimilarity, normalizePhone } = require('./registration');
 
-// ---------------------------------------------------------------------------
 // Microsoft Graph API OAuth 2.0 Authorization Code Flow
-//
-// All Graph API calls and token exchanges happen SERVER-SIDE only.
-// No access tokens, user profile data, or raw API responses are ever sent
-// to the client. Only an opaque short-lived result token (success / error
+// Only an opaque short-lived result token (success / error
 // code) is passed back, via a signed JWT that the frontend redeems once.
-// ---------------------------------------------------------------------------
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const CLIENT_ID = process.env.AZURE_CLIENT_ID;
@@ -111,10 +106,8 @@ function makeResultToken(result) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // GET /api/auth/microsoft/login
 // Initiates the OAuth flow by redirecting the browser to Microsoft.
-// ---------------------------------------------------------------------------
 router.get('/microsoft/login', (_req, res) => {
   if (!CLIENT_ID || !TENANT_ID || !REDIRECT_URI || !CLIENT_SECRET) {
     // MS Graph not configured — redirect back with a 501 result token
@@ -136,11 +129,8 @@ router.get('/microsoft/login', (_req, res) => {
   res.redirect(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${params}`);
 });
 
-// ---------------------------------------------------------------------------
 // GET /api/auth/microsoft/callback
 // Microsoft redirects here after the user authenticates.
-// All sensitive work happens here, server-side.
-// ---------------------------------------------------------------------------
 router.get('/microsoft/callback', async (_req, res) => {
   const req = _req; // used below
 
@@ -182,30 +172,26 @@ router.get('/microsoft/callback', async (_req, res) => {
     const accessToken = tokenRes.body.access_token;
 
     // Fetch user profile from Microsoft Graph API (server-to-server).
-    // ---------------------------------------------------------------
     // Fields retrieved:
     //   displayName  — used as the user's Full Name for name-similarity check
     //   mobilePhone  — used as the user's Phone Number for exact match
     //
     // To change which Graph fields are used, update the $select query below
     // AND update the variable assignments immediately after the API call.
-    // ---------------------------------------------------------------
     const profileRes = await httpsGet(
       'graph.microsoft.com',
       '/v1.0/me?$select=displayName,mobilePhone',
       accessToken
     );
 
-    // Access token is no longer needed; do NOT forward it anywhere
+    // Access token is no longer needed
     if (profileRes.status !== 200) {
       return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
 
-    // ---------------------------------------------------------------
     // FIELD MAPPING — adjust these two lines if your Graph fields differ
     const graphFullName = profileRes.body.displayName;   // Graph field → Full Name
     const graphPhone    = profileRes.body.mobilePhone;   // Graph field → Phone Number
-    // ---------------------------------------------------------------
 
     if (!graphFullName || !graphPhone) {
       // Profile incomplete — cannot validate
@@ -263,17 +249,15 @@ router.get('/microsoft/callback', async (_req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
 // POST /api/auth/microsoft/verify
 // Frontend submits the opaque result token here to learn the outcome.
 // Returns only: { success: boolean, errorCode?: number }
-// ---------------------------------------------------------------------------
 router.post('/microsoft/verify', (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ success: false, errorCode: 400 });
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     const { r: result, jti } = decoded;
 
     // One-time-use enforcement

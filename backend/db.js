@@ -133,7 +133,10 @@ async function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       full_name TEXT NOT NULL,
       staff_id TEXT NOT NULL,
-      phone_number TEXT NOT NULL DEFAULT ''
+      phone_number TEXT NOT NULL DEFAULT '',
+      title TEXT DEFAULT '',
+      department TEXT DEFAULT '',
+      location TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS registration_table (
@@ -142,7 +145,10 @@ async function initDatabase() {
       staff_id TEXT NOT NULL UNIQUE,
       phone_number TEXT NOT NULL DEFAULT '',
       prize_winner_mark TEXT DEFAULT '',
-      registered_at TEXT DEFAULT (datetime('now'))
+      registered_at TEXT DEFAULT (datetime('now')),
+      title TEXT DEFAULT '',
+      department TEXT DEFAULT '',
+      location TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS lucky_draw_rounds (
@@ -213,6 +219,30 @@ async function initDatabase() {
   const registrationCols = db.prepare('PRAGMA table_info(registration_table)').all();
   if (!registrationCols.find(c => c.name === 'phone_number')) {
     db.exec("ALTER TABLE registration_table ADD COLUMN phone_number TEXT NOT NULL DEFAULT ''");
+  }
+
+  // Migrations: add title, department, location to validation_table
+  const validationColsV2 = db.prepare('PRAGMA table_info(validation_table)').all();
+  if (!validationColsV2.find(c => c.name === 'title')) {
+    db.exec("ALTER TABLE validation_table ADD COLUMN title TEXT DEFAULT ''");
+  }
+  if (!validationColsV2.find(c => c.name === 'department')) {
+    db.exec("ALTER TABLE validation_table ADD COLUMN department TEXT DEFAULT ''");
+  }
+  if (!validationColsV2.find(c => c.name === 'location')) {
+    db.exec("ALTER TABLE validation_table ADD COLUMN location TEXT DEFAULT ''");
+  }
+
+  // Migrations: add title, department, location to registration_table
+  const registrationColsV2 = db.prepare('PRAGMA table_info(registration_table)').all();
+  if (!registrationColsV2.find(c => c.name === 'title')) {
+    db.exec("ALTER TABLE registration_table ADD COLUMN title TEXT DEFAULT ''");
+  }
+  if (!registrationColsV2.find(c => c.name === 'department')) {
+    db.exec("ALTER TABLE registration_table ADD COLUMN department TEXT DEFAULT ''");
+  }
+  if (!registrationColsV2.find(c => c.name === 'location')) {
+    db.exec("ALTER TABLE registration_table ADD COLUMN location TEXT DEFAULT ''");
   }
 
   // Migrations: add custom_name to lucky_draw_rounds

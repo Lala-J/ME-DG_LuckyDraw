@@ -1,11 +1,144 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfig } from '../../contexts/ConfigContext';
 import Layout from '../../components/Layout';
 
+const LIMIT = 30;
+
+// Table Popup Window
+function TablePopup({
+  title,
+  data,
+  columns,
+  page,
+  totalPages,
+  search,
+  onSearchChange,
+  onPageChange,
+  onClose,
+  renderCell,
+  startIndex
+}) {
+  const [visible, setVisible] = useState(false);
+  const windowRef = useRef(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  }, []);
+
+  const close = () => {
+    setVisible(false);
+    setTimeout(onClose, 300);
+  };
+
+  const handleBackdropClick = (e) => {
+    if (windowRef.current && !windowRef.current.contains(e.target)) close();
+  };
+
+  const renderPagination = () => {
+    const showPrevNext = totalPages > 5;
+    let start = Math.max(1, page - 2);
+    let end = start + 4;
+    if (end > totalPages) { end = totalPages; start = Math.max(1, end - 4); }
+    const pages = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return (
+      <div className="pagination">
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+        )}
+        {pages.map(p => (
+          <button key={p} className={`btn btn-small ${p === page ? 'btn-primary' : 'btn-outline'}`} onClick={() => onPageChange(p)}>{p}</button>
+        ))}
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Next</button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className={`table-modal-backdrop${visible ? ' table-modal-backdrop--visible' : ''}`}
+      onClick={handleBackdropClick}
+    >
+      <div
+        className={`table-modal-window${visible ? ' table-modal-window--visible' : ''}`}
+        ref={windowRef}
+      >
+        <div className="table-modal-header">
+          <h3>{title}</h3>
+          <button className="modal-close-btn" onClick={close}>&#x2715;</button>
+        </div>
+
+        <div className="table-modal-search">
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search for Full Name, Staff ID, Phone Number or Department..."
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div className="table-modal-body">
+          {(!data || data.length === 0) ? (
+            <p className="empty-text">No data available.</p>
+          ) : (
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    {columns.map(col => <th key={col.key}>{col.label}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.map((row, idx) => (
+                    <tr key={idx}>
+                      {columns.map(col => (
+                        <td key={col.key}>
+                          {renderCell ? renderCell(col, row, startIndex + idx) : (
+                            col.key === 'id' ? startIndex + idx + 1 : row[col.key]
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="table-modal-footer">
+          {renderPagination()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main Component
 export default function RegistrationConfig() {
   const { getAuthHeaders } = useAuth();
+  const { config } = useConfig();
   const navigate = useNavigate();
+
+  const prizeBadgeStyle = {
+    background: `linear-gradient(135deg, ${config.bg_color1 || '#667eea'} 0%, ${config.bg_color2 || '#764ba2'} 100%)`,
+    color: '#fff',
+    display: 'inline-block',
+    padding: '0.1rem 0.55rem',
+    borderRadius: '20px',
+    fontSize: 'inherit',
+    fontFamily: 'inherit',
+    fontWeight: 'inherit',
+    letterSpacing: 'normal',
+    whiteSpace: 'nowrap',
+    lineHeight: 'inherit'
+  };
 
   const [isOpen, setIsOpen] = useState(false);
   const [endTime, setEndTime] = useState(null);
@@ -13,13 +146,23 @@ export default function RegistrationConfig() {
   const [duration, setDuration] = useState('01:00:00');
   const [message, setMessage] = useState(null);
 
+  // Main table state (no search)
   const [validationData, setValidationData] = useState({ data: [], total: 0 });
   const [validationPage, setValidationPage] = useState(1);
-  const [validationSearch, setValidationSearch] = useState('');
 
   const [registrationData, setRegistrationData] = useState({ data: [], total: 0 });
   const [registrationPage, setRegistrationPage] = useState(1);
-  const [registrationSearch, setRegistrationSearch] = useState('');
+
+  // Popup state
+  const [validationPopupOpen, setValidationPopupOpen] = useState(false);
+  const [validationPopupData, setValidationPopupData] = useState({ data: [], total: 0 });
+  const [validationPopupPage, setValidationPopupPage] = useState(1);
+  const [validationPopupSearch, setValidationPopupSearch] = useState('');
+
+  const [registrationPopupOpen, setRegistrationPopupOpen] = useState(false);
+  const [registrationPopupData, setRegistrationPopupData] = useState({ data: [], total: 0 });
+  const [registrationPopupPage, setRegistrationPopupPage] = useState(1);
+  const [registrationPopupSearch, setRegistrationPopupSearch] = useState('');
 
   const [uploading, setUploading] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -33,7 +176,7 @@ export default function RegistrationConfig() {
   const [deleteRegistrationPassword, setDeleteRegistrationPassword] = useState('');
   const [deletingRegistration, setDeletingRegistration] = useState(false);
 
-  const LIMIT = 100;
+  // Fetch functions
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -48,90 +191,93 @@ export default function RegistrationConfig() {
     }
   }, []);
 
-  const fetchValidation = useCallback(async (page, search = '') => {
+  const fetchValidation = useCallback(async (page) => {
     try {
       const params = new URLSearchParams({ page, limit: LIMIT });
-      if (search) params.set('search', search);
-      const res = await fetch(`/api/validation/table?${params}`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setValidationData(data);
-      }
+      const res = await fetch(`/api/validation/table?${params}`, { headers: getAuthHeaders() });
+      if (res.ok) setValidationData(await res.json());
     } catch (err) {
       console.error('Failed to fetch validation:', err);
     }
   }, [getAuthHeaders]);
 
-  const fetchRegistration = useCallback(async (page, search = '') => {
+  const fetchRegistration = useCallback(async (page) => {
     try {
       const params = new URLSearchParams({ page, limit: LIMIT });
-      if (search) params.set('search', search);
-      const res = await fetch(`/api/registration/table?${params}`, {
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRegistrationData(data);
-      }
+      const res = await fetch(`/api/registration/table?${params}`, { headers: getAuthHeaders() });
+      if (res.ok) setRegistrationData(await res.json());
     } catch (err) {
       console.error('Failed to fetch registration:', err);
     }
   }, [getAuthHeaders]);
 
+  const fetchValidationPopup = useCallback(async (page, search) => {
+    try {
+      const params = new URLSearchParams({ page, limit: LIMIT });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/validation/table?${params}`, { headers: getAuthHeaders() });
+      if (res.ok) setValidationPopupData(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch validation popup:', err);
+    }
+  }, [getAuthHeaders]);
+
+  const fetchRegistrationPopup = useCallback(async (page, search) => {
+    try {
+      const params = new URLSearchParams({ page, limit: LIMIT });
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/registration/table?${params}`, { headers: getAuthHeaders() });
+      if (res.ok) setRegistrationPopupData(await res.json());
+    } catch (err) {
+      console.error('Failed to fetch registration popup:', err);
+    }
+  }, [getAuthHeaders]);
+
+  // Effects
+
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  // Countdown tick: updates timeLeft every second and auto-closes when expired
+  // Countdown tick
   useEffect(() => {
-    if (!isOpen || !endTime) {
-      setTimeLeft(null);
-      return;
-    }
+    if (!isOpen || !endTime) { setTimeLeft(null); return; }
     const tick = () => {
       const remaining = Math.max(0, Math.floor((new Date(endTime) - Date.now()) / 1000));
       setTimeLeft(remaining);
-      if (remaining === 0) {
-        setIsOpen(false);
-        setEndTime(null);
-      }
+      if (remaining === 0) { setIsOpen(false); setEndTime(null); }
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [isOpen, endTime]);
 
-  // Live-update registration table while registration is open
+  // Live-update registration table while open
   useEffect(() => {
     if (!isOpen) return;
-    const interval = setInterval(() => {
-      fetchRegistration(registrationPage, registrationSearch);
-    }, 5000);
+    const interval = setInterval(() => fetchRegistration(registrationPage), 5000);
     return () => clearInterval(interval);
-  }, [isOpen, registrationPage, registrationSearch, fetchRegistration]);
+  }, [isOpen, registrationPage, fetchRegistration]);
+
+  useEffect(() => { fetchValidation(validationPage); }, [validationPage, fetchValidation]);
+  useEffect(() => { fetchRegistration(registrationPage); }, [registrationPage, fetchRegistration]);
+
+  // Popup data effects (instant reporting)
+  useEffect(() => {
+    if (!validationPopupOpen) return;
+    fetchValidationPopup(validationPopupPage, validationPopupSearch);
+  }, [validationPopupOpen, validationPopupPage, validationPopupSearch, fetchValidationPopup]);
 
   useEffect(() => {
-    const t = setTimeout(() => fetchValidation(validationPage, validationSearch), validationSearch ? 200 : 0);
-    return () => clearTimeout(t);
-  }, [validationPage, validationSearch, fetchValidation]);
+    if (!registrationPopupOpen) return;
+    fetchRegistrationPopup(registrationPopupPage, registrationPopupSearch);
+  }, [registrationPopupOpen, registrationPopupPage, registrationPopupSearch, fetchRegistrationPopup]);
 
-  useEffect(() => {
-    const t = setTimeout(() => fetchRegistration(registrationPage, registrationSearch), registrationSearch ? 200 : 0);
-    return () => clearTimeout(t);
-  }, [registrationPage, registrationSearch, fetchRegistration]);
+  // Handlers
 
   const handleClose = async () => {
     try {
-      const res = await fetch('/api/registration/close', {
-        method: 'POST',
-        headers: getAuthHeaders()
-      });
-      if (res.ok) {
-        setIsOpen(false);
-        setEndTime(null);
-        setMessage({ type: 'success', text: 'Registration closed.' });
-      }
-    } catch (err) {
+      const res = await fetch('/api/registration/close', { method: 'POST', headers: getAuthHeaders() });
+      if (res.ok) { setIsOpen(false); setEndTime(null); setMessage({ type: 'success', text: 'Registration closed.' }); }
+    } catch {
       setMessage({ type: 'error', text: 'Failed to close registration.' });
     }
   };
@@ -140,23 +286,14 @@ export default function RegistrationConfig() {
     if (starting) return;
     setStarting(true);
     setMessage(null);
-
     try {
       const parts = duration.split(':').map(Number);
       const totalSeconds = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-
-      if (totalSeconds <= 0) {
-        setMessage({ type: 'error', text: 'Duration must be greater than 0.' });
-        setStarting(false);
-        return;
-      }
+      if (totalSeconds <= 0) { setMessage({ type: 'error', text: 'Duration must be greater than 0.' }); return; }
 
       const res = await fetch('/api/registration/open', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ durationSeconds: totalSeconds })
       });
 
@@ -179,25 +316,18 @@ export default function RegistrationConfig() {
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setUploading(true);
     setMessage(null);
-
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/validation/upload', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: formData
-      });
-
+      const res = await fetch('/api/validation/upload', { method: 'POST', headers: getAuthHeaders(), body: formData });
       if (res.ok) {
         const data = await res.json();
         setMessage({ type: 'success', text: `Validation table uploaded! ${data.count} entries loaded.` });
-        setValidationSearch('');
         setValidationPage(1);
-        fetchValidation(1, '');
+        fetchValidation(1);
+        if (validationPopupOpen) { setValidationPopupPage(1); fetchValidationPopup(1, validationPopupSearch); }
       } else {
         const data = await res.json();
         throw new Error(data.error || 'Upload failed');
@@ -214,17 +344,14 @@ export default function RegistrationConfig() {
     if (copying) return;
     setCopying(true);
     setMessage(null);
-
     try {
-      const res = await fetch('/api/validation/to-registration', {
-        method: 'POST',
-        headers: getAuthHeaders()
-      });
+      const res = await fetch('/api/validation/to-registration', { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setMessage({ type: 'success', text: `Copied ${data.inserted} of ${data.total} entries to registration table.` });
         setRegistrationPage(1);
-        fetchRegistration(1, registrationSearch);
+        fetchRegistration(1);
+        if (registrationPopupOpen) { setRegistrationPopupPage(1); fetchRegistrationPopup(1, registrationPopupSearch); }
       } else {
         const data = await res.json();
         throw new Error(data.error || 'Copy failed');
@@ -251,9 +378,9 @@ export default function RegistrationConfig() {
       setMessage({ type: 'success', text: 'Validation table cleared.' });
       setDeleteValidationConfirm(false);
       setDeleteValidationPassword('');
-      setValidationSearch('');
       setValidationPage(1);
-      fetchValidation(1, '');
+      fetchValidation(1);
+      if (validationPopupOpen) { setValidationPopupPage(1); fetchValidationPopup(1, validationPopupSearch); }
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -276,9 +403,9 @@ export default function RegistrationConfig() {
       setMessage({ type: 'success', text: 'Registration table cleared.' });
       setDeleteRegistrationConfirm(false);
       setDeleteRegistrationPassword('');
-      setRegistrationSearch('');
       setRegistrationPage(1);
-      fetchRegistration(1, '');
+      fetchRegistration(1);
+      if (registrationPopupOpen) { setRegistrationPopupPage(1); fetchRegistrationPopup(1, registrationPopupSearch); }
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -286,18 +413,26 @@ export default function RegistrationConfig() {
     }
   };
 
-  const handleAddToRegistration = async (full_name, staff_id, phone_number) => {
+  const handleAddToRegistration = async (row) => {
     setMessage(null);
     try {
       const res = await fetch('/api/registration/add-entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ full_name, staff_id, phone_number: phone_number || '' })
+        body: JSON.stringify({
+          full_name: row.full_name,
+          staff_id: row.staff_id,
+          phone_number: row.phone_number || '',
+          title: row.title || '',
+          department: row.department || '',
+          location: row.location || ''
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add entry');
-      setMessage({ type: 'success', text: `${full_name} added to registration.` });
-      fetchRegistration(registrationPage, registrationSearch);
+      setMessage({ type: 'success', text: `${row.full_name} added to registration.` });
+      fetchRegistration(registrationPage);
+      fetchRegistrationPopup(registrationPopupPage, registrationPopupSearch);
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     }
@@ -305,8 +440,7 @@ export default function RegistrationConfig() {
 
   const handleDownload = (type) => {
     const url = type === 'validation' ? '/api/validation/download' : '/api/registration/download';
-    const headers = getAuthHeaders();
-    fetch(url, { headers })
+    fetch(url, { headers: getAuthHeaders() })
       .then(res => res.blob())
       .then(blob => {
         const a = document.createElement('a');
@@ -327,87 +461,49 @@ export default function RegistrationConfig() {
 
   const totalValidationPages = Math.max(1, Math.ceil((validationData.total || 0) / LIMIT));
   const totalRegistrationPages = Math.max(1, Math.ceil((registrationData.total || 0) / LIMIT));
+  const totalValidationPopupPages = Math.max(1, Math.ceil((validationPopupData.total || 0) / LIMIT));
+  const totalRegistrationPopupPages = Math.max(1, Math.ceil((registrationPopupData.total || 0) / LIMIT));
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const parts = dateStr.replace('T', ' ').split(/[- :]/);
+    if (parts.length < 6) return dateStr;
+    const [year, month, day, hh, mm, ss] = parts;
+    return `${String(day).padStart(2,'0')}-${months[parseInt(month,10)-1]}-${year} ${hh}:${mm}:${ss}`;
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.replace('T', ' ').split(/[- :]/);
+    if (parts.length < 6) return dateStr;
+    const [,,, hh, mm, ss] = parts;
+    return `${hh}:${mm}:${ss}`;
+  };
 
   const renderPagination = (currentPage, totalPages, setPage) => {
+    const showPrevNext = totalPages > 5;
+    let start = Math.max(1, currentPage - 2);
+    let end = start + 4;
+    if (end > totalPages) { end = totalPages; start = Math.max(1, end - 4); }
     const pages = [];
-    const start = Math.max(1, currentPage - 2);
-    const end = Math.min(totalPages, currentPage + 2);
-
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
-    }
-
+    for (let i = start; i <= end; i++) pages.push(i);
     return (
       <div className="pagination">
-        <button
-          className="btn btn-small btn-outline"
-          disabled={currentPage <= 1}
-          onClick={() => setPage(currentPage - 1)}
-        >
-          Previous
-        </button>
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
+        )}
         {pages.map(p => (
-          <button
-            key={p}
-            className={`btn btn-small ${p === currentPage ? 'btn-primary' : 'btn-outline'}`}
-            onClick={() => setPage(p)}
-          >
-            {p}
-          </button>
+          <button key={p} className={`btn btn-small ${p === currentPage ? 'btn-primary' : 'btn-outline'}`} onClick={() => setPage(p)}>{p}</button>
         ))}
-        <button
-          className="btn btn-small btn-outline"
-          disabled={currentPage >= totalPages}
-          onClick={() => setPage(currentPage + 1)}
-        >
-          Next
-        </button>
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
+        )}
       </div>
     );
   };
 
-  const renderTable = (rows, columns, startIndex = 0, onRowAction = null) => {
-    if (!rows || rows.length === 0) {
-      return <p className="empty-text">No data available.</p>;
-    }
-
-    return (
-      <div className="table-wrapper">
-        <table className="data-table">
-          <thead>
-            <tr>
-              {columns.map(col => (
-                <th key={col.key}>{col.label}</th>
-              ))}
-              {onRowAction && <th></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, idx) => (
-              <tr key={idx}>
-                {columns.map(col => (
-                  <td key={col.key}>
-                    {col.key === 'id' ? startIndex + idx + 1 : row[col.key]}
-                  </td>
-                ))}
-                {onRowAction && (
-                  <td>
-                    <button
-                      className="btn btn-primary btn-small"
-                      onClick={() => onRowAction(row)}
-                    >
-                      Add
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
+  // Main-page columns (no title/dept/location)
   const validationColumns = [
     { key: 'id', label: '#' },
     { key: 'full_name', label: 'Full Name' },
@@ -424,6 +520,89 @@ export default function RegistrationConfig() {
     { key: 'registered_at', label: 'Registered' }
   ];
 
+  // Popup columns (all columns)
+  const validationPopupColumns = [
+    { key: 'id', label: '#' },
+    { key: '_add', label: '' },
+    { key: 'full_name', label: 'Full Name' },
+    { key: 'staff_id', label: 'Staff ID' },
+    { key: 'phone_number', label: 'Phone Number' },
+    { key: 'title', label: 'Title' },
+    { key: 'department', label: 'Department' },
+    { key: 'location', label: 'Location' }
+  ];
+
+  const registrationPopupColumns = [
+    { key: 'id', label: '#' },
+    { key: 'full_name', label: 'Full Name' },
+    { key: 'staff_id', label: 'Staff ID' },
+    { key: 'phone_number', label: 'Phone Number' },
+    { key: 'prize_winner_mark', label: 'Prize' },
+    { key: 'registered_at', label: 'Registered' },
+    { key: 'title', label: 'Title' },
+    { key: 'department', label: 'Department' },
+    { key: 'location', label: 'Location' }
+  ];
+
+  const renderMainTable = (rows, columns, startIndex) => {
+    if (!rows || rows.length === 0) return <p className="empty-text">No data available.</p>;
+    return (
+      <div className="table-wrapper">
+        <table className="data-table">
+          <thead>
+            <tr>{columns.map(col => <th key={col.key}>{col.label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={idx}>
+                {columns.map(col => (
+                  <td key={col.key}>
+                    {col.key === 'id'
+                      ? startIndex + idx + 1
+                      : col.key === 'prize_winner_mark'
+                        ? (row.prize_winner_mark ? <span style={prizeBadgeStyle}>{row.prize_winner_mark}</span> : '')
+                        : col.key === 'registered_at'
+                          ? (row.registered_at
+                              ? <span title={formatDate(row.registered_at)} style={{ cursor: 'default', borderBottom: '1px dotted currentColor', whiteSpace: 'nowrap' }}>
+                                  {formatTime(row.registered_at)}
+                                </span>
+                              : '')
+                          : row[col.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const renderValidationPopupCell = (col, row, globalIdx) => {
+    if (col.key === 'id') return globalIdx + 1;
+    if (col.key === '_add') return (
+      <button
+        className="btn btn-primary btn-small"
+        style={{ whiteSpace: 'nowrap' }}
+        onClick={() => handleAddToRegistration(row)}
+      >
+        Add
+      </button>
+    );
+    return row[col.key] || '';
+  };
+
+  const renderRegistrationPopupCell = (col, row, globalIdx) => {
+    if (col.key === 'id') return globalIdx + 1;
+    if (col.key === 'prize_winner_mark') {
+      return row.prize_winner_mark
+        ? <span style={prizeBadgeStyle}>{row.prize_winner_mark}</span>
+        : '';
+    }
+    if (col.key === 'registered_at') return formatDate(row.registered_at);
+    return row[col.key] || '';
+  };
+
   return (
     <Layout>
       <div className="admin-page">
@@ -439,6 +618,7 @@ export default function RegistrationConfig() {
             <div className={`message-box message-${message.type}`}>{message.text}</div>
           )}
 
+          {/* Registration status */}
           <div className="reg-controls">
             <div className="reg-status-toggle">
               <span className="form-label">Registration Status:</span>
@@ -448,20 +628,19 @@ export default function RegistrationConfig() {
                   {isOpen ? 'OPEN' : 'CLOSED'}
                 </span>
                 {isOpen && timeLeft !== null && (
-                  <span className="reg-countdown-timer">
-                    Closes in {formatTimeLeft(timeLeft)}
-                  </span>
+                  <span className="reg-countdown-timer">Closes in {formatTimeLeft(timeLeft)}</span>
                 )}
                 {isOpen && (
-                  <button className="btn btn-danger btn-small" onClick={handleClose}>
-                    Close Registration
-                  </button>
+                  <button className="btn btn-danger btn-small" onClick={handleClose}>Close Registration</button>
                 )}
               </div>
             </div>
+          </div>
 
+          {/* Action controls — two rows, each row: [form input] [button] */}
+          <div className="reg-action-block">
             {!isOpen && (
-              <div className="reg-open-controls">
+              <div className="reg-action-row">
                 <div className="form-group">
                   <label className="form-label">Duration (hh:mm:ss)</label>
                   <input
@@ -472,42 +651,54 @@ export default function RegistrationConfig() {
                     placeholder="01:00:00"
                   />
                 </div>
-                <button className="btn btn-primary" onClick={handleStart} disabled={starting}>
+                <button className="btn btn-primary reg-action-btn" onClick={handleStart} disabled={starting}>
                   {starting ? 'Starting...' : 'Start Registration'}
                 </button>
               </div>
             )}
-          </div>
-
-          <div className="upload-controls">
-            <div className="form-group">
-              <label className="form-label">Upload Validation Table (Excel)</label>
-              <input
-                type="file"
-                className="form-input form-file"
-                accept=".xlsx,.xls,.csv"
-                onChange={handleUpload}
-                disabled={uploading}
-              />
+            <div className="reg-action-row">
+              <div className="form-group">
+                <label className="form-label">Upload Validation Table (Excel)</label>
+                <input
+                  type="file"
+                  className="form-input form-file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleUpload}
+                  disabled={uploading}
+                />
+              </div>
+              <button className="btn btn-primary reg-action-btn" onClick={handleCopyToRegistration} disabled={copying}>
+                {copying ? 'Copying...' : 'Copy Validation to Registration'}
+              </button>
             </div>
-            <button className="btn btn-secondary" onClick={handleCopyToRegistration} disabled={copying}>
-              {copying ? 'Copying...' : 'Copy Validation to Registration'}
-            </button>
           </div>
 
+          {/* Tables */}
           <div className="tables-side-by-side">
+
+            {/* Validation Table */}
             <div className="table-section">
               <div className="table-header">
-                <h3>Validation Table</h3>
+                <div className="table-header-left">
+                  <h3>Validation Table</h3>
+                  <button
+                    className="btn-eye"
+                    title="View full table"
+                    onClick={() => { setValidationPopupOpen(true); setValidationPopupPage(1); setValidationPopupSearch(''); }}
+                  >
+                    👁
+                  </button>
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button className="btn btn-outline btn-small" onClick={() => handleDownload('validation')}>
-                    Download
+                  <button className="btn btn-download btn-small" onClick={() => handleDownload('validation')}>
+                    Download Table
                   </button>
                   <button className="btn btn-danger btn-small" onClick={() => { setDeleteValidationConfirm(true); setDeleteValidationPassword(''); }}>
                     Delete Table
                   </button>
                 </div>
               </div>
+
               {deleteValidationConfirm && (
                 <div className="delete-confirm-box">
                   <p>Enter admin password to delete all validation data:</p>
@@ -528,31 +719,35 @@ export default function RegistrationConfig() {
                   </div>
                 </div>
               )}
+
               <p className="table-count">Total: {validationData.total || 0}</p>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Search name, staff ID or phone..."
-                value={validationSearch}
-                onChange={(e) => { setValidationSearch(e.target.value); setValidationPage(1); }}
-                style={{ marginBottom: '0.5rem' }}
-              />
-              {renderTable(validationData.data, validationColumns, (validationPage - 1) * LIMIT, (row) => handleAddToRegistration(row.full_name, row.staff_id, row.phone_number))}
+              {renderMainTable(validationData.data, validationColumns, (validationPage - 1) * LIMIT)}
               {renderPagination(validationPage, totalValidationPages, setValidationPage)}
             </div>
 
+            {/* Registration Table */}
             <div className="table-section">
               <div className="table-header">
-                <h3>Registration Table</h3>
+                <div className="table-header-left">
+                  <h3>Registration Table</h3>
+                  <button
+                    className="btn-eye"
+                    title="View full table"
+                    onClick={() => { setRegistrationPopupOpen(true); setRegistrationPopupPage(1); setRegistrationPopupSearch(''); }}
+                  >
+                    👁
+                  </button>
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button className="btn btn-outline btn-small" onClick={() => handleDownload('registration')}>
-                    Download
+                  <button className="btn btn-download btn-small" onClick={() => handleDownload('registration')}>
+                    Download Table
                   </button>
                   <button className="btn btn-danger btn-small" onClick={() => { setDeleteRegistrationConfirm(true); setDeleteRegistrationPassword(''); }}>
                     Delete Table
                   </button>
                 </div>
               </div>
+
               {deleteRegistrationConfirm && (
                 <div className="delete-confirm-box">
                   <p>Enter admin password to delete all registration data:</p>
@@ -573,21 +768,49 @@ export default function RegistrationConfig() {
                   </div>
                 </div>
               )}
+
               <p className="table-count">Total: {registrationData.total || 0}</p>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Search name, staff ID or phone..."
-                value={registrationSearch}
-                onChange={(e) => { setRegistrationSearch(e.target.value); setRegistrationPage(1); }}
-                style={{ marginBottom: '0.5rem' }}
-              />
-              {renderTable(registrationData.data, registrationColumns, (registrationPage - 1) * LIMIT)}
+              {renderMainTable(registrationData.data, registrationColumns, (registrationPage - 1) * LIMIT)}
               {renderPagination(registrationPage, totalRegistrationPages, setRegistrationPage)}
             </div>
+
           </div>
         </div>
       </div>
+
+      {/* Validation Table Popup */}
+      {validationPopupOpen && (
+        <TablePopup
+          title="Validation Table — Full View"
+          data={validationPopupData.data}
+          columns={validationPopupColumns}
+          page={validationPopupPage}
+          totalPages={totalValidationPopupPages}
+          search={validationPopupSearch}
+          onSearchChange={(val) => { setValidationPopupSearch(val); setValidationPopupPage(1); }}
+          onPageChange={setValidationPopupPage}
+          onClose={() => setValidationPopupOpen(false)}
+          renderCell={renderValidationPopupCell}
+          startIndex={(validationPopupPage - 1) * LIMIT}
+        />
+      )}
+
+      {/* Registration Table Popup */}
+      {registrationPopupOpen && (
+        <TablePopup
+          title="Registration Table — Full View"
+          data={registrationPopupData.data}
+          columns={registrationPopupColumns}
+          page={registrationPopupPage}
+          totalPages={totalRegistrationPopupPages}
+          search={registrationPopupSearch}
+          onSearchChange={(val) => { setRegistrationPopupSearch(val); setRegistrationPopupPage(1); }}
+          onPageChange={setRegistrationPopupPage}
+          onClose={() => setRegistrationPopupOpen(false)}
+          renderCell={renderRegistrationPopupCell}
+          startIndex={(registrationPopupPage - 1) * LIMIT}
+        />
+      )}
     </Layout>
   );
 }

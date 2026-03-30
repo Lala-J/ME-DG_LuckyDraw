@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/Layout';
 
-// ─── Password Confirm Modal ────────────────────────────────────────────────────
+// Password Confirm Modal
 function PasswordModal({ title, onConfirm, onCancel }) {
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
@@ -66,7 +66,7 @@ function PasswordModal({ title, onConfirm, onCancel }) {
   );
 }
 
-// ─── Prize Entry (used in both Prize Definition & Configure Prizes windows) ────
+// Prize Entry (used in both Prize Definition & Configure Prizes windows) 
 function PrizeEntry({ prize, onNameBlur, onPictureUpload, onDeletePicture, onDelete, selectable, selected, onToggle, disabledReason }) {
   const [name, setName] = useState(prize.name || '');
   const [pendingDelete, setPendingDelete] = useState(false);
@@ -86,9 +86,8 @@ function PrizeEntry({ prize, onNameBlur, onPictureUpload, onDeletePicture, onDel
     }
   };
 
-  const token = localStorage.getItem('admin_token');
   const imgSrc = prize.picturePath
-    ? prize.picturePath + '?token=' + encodeURIComponent(token || '') + '&t=' + (prize._ts || 0)
+    ? prize.picturePath + '?t=' + (prize._ts || 0)
     : '/RewardsFallback.png';
 
   return (
@@ -171,7 +170,7 @@ function PrizeEntry({ prize, onNameBlur, onPictureUpload, onDeletePicture, onDel
   );
 }
 
-// ─── Add Item Line (horizontal + icon) ────────────────────────────────────────
+// Add Item Line (horizontal + icon)
 function AddItemLine({ onClick, disabled, tooltip }) {
   return (
     <div
@@ -186,7 +185,7 @@ function AddItemLine({ onClick, disabled, tooltip }) {
   );
 }
 
-// ─── Prize Definition Window ───────────────────────────────────────────────────
+// Prize Definition Window
 function PrizeDefinitionWindow({ prizes, onClose, onAdd, onNameBlur, onPictureUpload, onDeletePicture, onDelete }) {
   const [visible, setVisible] = useState(false);
   const windowRef = useRef(null);
@@ -248,7 +247,7 @@ function PrizeDefinitionWindow({ prizes, onClose, onAdd, onNameBlur, onPictureUp
   );
 }
 
-// ─── Configure Prizes Window ───────────────────────────────────────────────────
+// Configure Prizes Window 
 function ConfigurePrizesWindow({ allPrizes, currentRoundNumber, currentRoundPrizeIds, onSave, onClose }) {
   const [visible, setVisible] = useState(false);
   const [selected, setSelected] = useState(new Set(currentRoundPrizeIds));
@@ -301,19 +300,25 @@ function ConfigurePrizesWindow({ allPrizes, currentRoundNumber, currentRoundPriz
           {allPrizes.length === 0 && (
             <p style={{ opacity: 0.5, textAlign: 'center', padding: '1rem 0' }}>No prizes defined. Use Prize Definition first.</p>
           )}
-          {allPrizes.map(prize => {
+          {[...allPrizes]
+            .sort((a, b) => {
+              const aOther = a.assignedRound && a.assignedRound !== currentRoundNumber ? 1 : 0;
+              const bOther = b.assignedRound && b.assignedRound !== currentRoundNumber ? 1 : 0;
+              return aOther - bOther;
+            })
+            .map(prize => {
               const inOtherRound = prize.assignedRound && prize.assignedRound !== currentRoundNumber;
-            return (
-              <PrizeEntry
-                key={prize.prize_id}
-                prize={prize}
-                selectable
-                selected={selected.has(prize.prize_id)}
-                onToggle={toggle}
-                disabledReason={inOtherRound ? `Assigned to Round ${prize.assignedRound}` : null}
-              />
-            );
-          })}
+              return (
+                <PrizeEntry
+                  key={prize.prize_id}
+                  prize={prize}
+                  selectable
+                  selected={selected.has(prize.prize_id)}
+                  onToggle={toggle}
+                  disabledReason={inOtherRound ? `Assigned to Round ${prize.assignedRound}` : null}
+                />
+              );
+            })}
         </div>
         <div className="fullscreen-modal-footer">
           <button className="btn btn-outline" onClick={close}>Cancel</button>
@@ -326,7 +331,7 @@ function ConfigurePrizesWindow({ allPrizes, currentRoundNumber, currentRoundPriz
   );
 }
 
-// ─── Round Card ────────────────────────────────────────────────────────────────
+// Round Card
 function RoundCard({ round, runningRound, canDelete, onRunRoulette, onRedraw, onDeleteRound, onConfigPrizes, onNameBlur }) {
   const [localName, setLocalName] = useState(round.customName || '');
 
@@ -338,25 +343,35 @@ function RoundCard({ round, runningRound, canDelete, onRunRoulette, onRedraw, on
 
   return (
     <div className={`glass-card round-card-v2${round.executed ? ' round-executed' : ''}`}>
-      {/* Header row: custom name + run button */}
-      <div className="round-card-header">
-        <input
-          className="form-input round-name-input"
-          placeholder={`Round ${round.roundNumber}`}
-          value={localName}
-          onChange={(e) => setLocalName(e.target.value)}
-          onBlur={() => onNameBlur(round.roundNumber, localName)}
-          disabled={round.executed}
-        />
-        <button
-          className={`btn btn-small ${canRun ? 'btn-primary' : round.executed ? 'btn-disabled' : 'btn-outline'}`}
-          onClick={() => canRun && onRunRoulette(round.roundNumber)}
-          disabled={!canRun}
-          title={round.prizes.length === 0 ? 'No prizes configured' : ''}
-        >
-          {round.executed ? 'Completed' : isRunning ? 'Running…' : 'Run Roulette'}
-        </button>
-      </div>
+      {/* Title — full width */}
+      <input
+        className="form-input round-name-input"
+        placeholder={`Round ${round.roundNumber}`}
+        value={localName}
+        onChange={(e) => setLocalName(e.target.value)}
+        onBlur={() => onNameBlur(round.roundNumber, localName)}
+        disabled={round.executed}
+      />
+
+      {/* Action row: Configure Prizes (left) | Run Roulette (right) */}
+      {!round.executed && (
+        <div className="round-card-btn-row">
+          <button
+            className="btn btn-prize-def ldc-action-btn round-card-action-btn"
+            onClick={() => onConfigPrizes(round.roundNumber)}
+          >
+            Configure Prizes
+          </button>
+          <button
+            className={`btn ldc-action-btn round-card-action-btn ${canRun ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => canRun && onRunRoulette(round.roundNumber)}
+            disabled={!canRun}
+            title={round.prizes.length === 0 ? 'No prizes configured' : ''}
+          >
+            {isRunning ? 'Running…' : 'Run Roulette'}
+          </button>
+        </div>
+      )}
 
       {/* Prizes section */}
       <div className="round-prizes-section">
@@ -368,11 +383,6 @@ function RoundCard({ round, runningRound, canDelete, onRunRoulette, onRedraw, on
           </div>
         ) : (
           <p style={{ opacity: 0.45, fontSize: '0.82rem', margin: '0.25rem 0' }}>No prizes configured.</p>
-        )}
-        {!round.executed && (
-          <button className="btn btn-outline btn-small" onClick={() => onConfigPrizes(round.roundNumber)}>
-            Configure Prizes
-          </button>
         )}
       </div>
 
@@ -433,7 +443,7 @@ function RoundCard({ round, runningRound, canDelete, onRunRoulette, onRedraw, on
   );
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
+// Main Component
 export default function LuckyDrawConfig() {
   const { getAuthHeaders } = useAuth();
   const navigate = useNavigate();
@@ -459,7 +469,7 @@ export default function LuckyDrawConfig() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  // ── Broadcast channel ────────────────────────────────────────────────────────
+  // Broadcast channel
   useEffect(() => {
     channelRef.current = new BroadcastChannel('luckydraw');
     channelRef.current.onmessage = (event) => {
@@ -468,7 +478,7 @@ export default function LuckyDrawConfig() {
     return () => channelRef.current?.close();
   }, []);
 
-  // ── Fetch state ───────────────────────────────────────────────────────────────
+  // Fetch state
   const fetchAll = useCallback(async () => {
     try {
       const [configRes, regRes] = await Promise.all([
@@ -504,7 +514,7 @@ export default function LuckyDrawConfig() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Add round ─────────────────────────────────────────────────────────────────
+  // Add round
   const addRound = async (silent = false) => {
     try {
       const res = await fetch('/api/luckydraw/rounds', {
@@ -519,7 +529,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Save round name ───────────────────────────────────────────────────────────
+  // Save round name
   const handleNameBlur = async (roundNumber, customName) => {
     try {
       await fetch(`/api/luckydraw/rounds/${roundNumber}/name`, {
@@ -532,7 +542,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Configure prizes for a round ─────────────────────────────────────────────
+  // Configure prizes for a round
   const handleSaveRoundPrizes = async (roundNumber, prizeIds) => {
     try {
       const res = await fetch(`/api/luckydraw/rounds/${roundNumber}/prizes`, {
@@ -548,7 +558,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Run Roulette ──────────────────────────────────────────────────────────────
+  // Run Roulette
   const handleRunRoulette = async (roundNumber) => {
     // Capture round metadata BEFORE fetchAll can change state
     const roundName = rounds.find(r => r.roundNumber === roundNumber)?.customName || `Round ${roundNumber}`;
@@ -584,7 +594,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Redraw (password required) ────────────────────────────────────────────────
+  // Redraw (password required)
   const handleRedraw = (roundNumber) => {
     setPwModal({
       title: `Confirm Redraw — Round ${roundNumber}`,
@@ -605,7 +615,7 @@ export default function LuckyDrawConfig() {
     });
   };
 
-  // ── Delete Round ──────────────────────────────────────────────────────────────
+  // Delete Round
   const handleDeleteRound = async (roundNumber) => {
     try {
       const res = await fetch(`/api/luckydraw/rounds/${roundNumber}`, {
@@ -620,7 +630,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Reset Lucky Draw (password required) ─────────────────────────────────────
+  // Reset Lucky Draw (password required)
   const handleReset = () => {
     setPwModal({
       title: 'Confirm Reset Lucky Draw',
@@ -641,7 +651,7 @@ export default function LuckyDrawConfig() {
     });
   };
 
-  // ── Prize Definition CRUD ─────────────────────────────────────────────────────
+  // Prize Definition CRUD
   const openPrizeDef = () => {
     setPwModal({
       title: 'Enter Admin Password to Access Prize Definition',
@@ -729,7 +739,7 @@ export default function LuckyDrawConfig() {
     }
   };
 
-  // ── Derived values ────────────────────────────────────────────────────────────
+  // Derived values
   const assignedPrizeIds = new Set(rounds.flatMap(r => r.prizes.map(p => p.prizeId)));
   const availablePrizesCount = prizes.filter(p => !assignedPrizeIds.has(p.prize_id)).length;
 

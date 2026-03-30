@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
 const { initDatabase } = require('./db');
@@ -22,18 +23,60 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 4000;
 
-  app.use(helmet());
-
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : ['http://localhost:3000'];
-  app.use(cors({ origin: allowedOrigins }));
+
+  // Security policy enforcement — set DEFAULT_SECURITY_POLICY=false to bypass (not recommended)
+  const securityPolicy = process.env.DEFAULT_SECURITY_POLICY !== 'false';
+
+  if (securityPolicy && !isDev) {
+    const insecureOrigins = allowedOrigins.filter(
+      o => !o.startsWith('https://') && !o.includes('localhost') && !o.includes('127.0.0.1')
+    );
+    if (insecureOrigins.length > 0) {
+      console.error('[SECURITY] DEFAULT_SECURITY_POLICY is enabled but the following ALLOWED_ORIGINS use HTTP:');
+      console.error('  ' + insecureOrigins.join(', '));
+      console.error('  Enforce HTTPS on your reverse proxy or set DEFAULT_SECURITY_POLICY=false to bypass.');
+      process.exit(1);
+    }
+    const azureRedirect = process.env.AZURE_REDIRECT_URI;
+    if (azureRedirect && !azureRedirect.startsWith('https://')) {
+      console.error('[SECURITY] DEFAULT_SECURITY_POLICY is enabled but AZURE_REDIRECT_URI uses HTTP: ' + azureRedirect);
+      console.error('  Update AZURE_REDIRECT_URI to use https:// or set DEFAULT_SECURITY_POLICY=false to bypass.');
+      process.exit(1);
+    }
+  }
+
+  app.use(helmet({
+    hsts: securityPolicy ? {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    } : false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"]
+      }
+    }
+  }));
+
+  app.use(cors({ origin: allowedOrigins, credentials: true }));
+  app.use(cookieParser());
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // All employees share a single corporate NAT IP, so this limit must account
-  // for the entire employee pool submitting at once (up to ~600/hr peak).
   const registrationLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 1000,
@@ -65,7 +108,7 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Global error handler — never expose stack traces in production
+  // Global error handler
   // Express requires all 4 params to recognise this as an error handler
   app.use((err, _req, res, _next) => {
     console.error(err);

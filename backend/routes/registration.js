@@ -131,6 +131,11 @@ registrationRouter.post('/', async (req, res) => {
       }
 
       const trimmedName = fullName.trim();
+
+      if (trimmedName.length > 100) {
+        return { status: 400, body: { success: false, message: 'Full name must be 100 characters or fewer' } };
+      }
+
       const inputPhone = normalizePhone(phoneNumber);
 
       if (!inputPhone) {
@@ -166,13 +171,16 @@ registrationRouter.post('/', async (req, res) => {
 
       const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(validationRow.staff_id);
       if (existing) {
-        return { status: 400, body: { success: false, message: 'This phone number is already registered.' } };
+        return { status: 400, body: { success: false, message: 'This staff member is already registered.' } };
       }
 
-      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
+      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)').run(
         validationRow.full_name,
         validationRow.staff_id,
-        validationRow.phone_number
+        validationRow.phone_number,
+        validationRow.title || '',
+        validationRow.department || '',
+        validationRow.location || ''
       );
       return { status: 200, body: { success: true, message: 'Registration successful!' } };
     });
@@ -195,8 +203,8 @@ registrationRouter.get('/table', auth, (req, res) => {
     let totalRow, rows;
     if (search) {
       const like = `%${search}%`;
-      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ?').get(like, like, like);
-      rows = db.prepare('SELECT * FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, limit, offset);
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? OR department LIKE ?').get(like, like, like, like);
+      rows = db.prepare('SELECT * FROM registration_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? OR department LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, like, limit, offset);
     } else {
       totalRow = db.prepare('SELECT COUNT(*) as cnt FROM registration_table').get();
       rows = db.prepare('SELECT * FROM registration_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
@@ -218,15 +226,18 @@ registrationRouter.get('/table', auth, (req, res) => {
 registrationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number, prize_winner_mark, registered_at FROM registration_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, prize_winner_mark, registered_at, title, department, location FROM registration_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id', 'phone_number', 'prize_winner_mark', 'registered_at']
+      header: ['full_name', 'staff_id', 'phone_number', 'prize_winner_mark', 'registered_at', 'title', 'department', 'location']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
     ws['C1'] = { v: 'Phone Number', t: 's' };
     ws['D1'] = { v: 'Prize Winner', t: 's' };
     ws['E1'] = { v: 'Registered At', t: 's' };
+    ws['F1'] = { v: 'Title', t: 's' };
+    ws['G1'] = { v: 'Department', t: 's' };
+    ws['H1'] = { v: 'Location', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
@@ -272,14 +283,17 @@ registrationRouter.post('/clear', auth, (req, res) => {
 registrationRouter.post('/add-entry', auth, (req, res) => {
   try {
     const db = getDb();
-    const { full_name, staff_id, phone_number } = req.body;
+    const { full_name, staff_id, phone_number, title, department, location } = req.body;
     if (!full_name || !staff_id) {
       return res.status(400).json({ error: 'Full name and staff ID are required' });
     }
-    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
+    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)').run(
       full_name.trim(),
       staff_id.trim(),
-      (phone_number || '').trim()
+      (phone_number || '').trim(),
+      (title || '').trim(),
+      (department || '').trim(),
+      (location || '').trim()
     );
     if (result.changes === 0) {
       return res.status(400).json({ error: 'Staff ID is already registered' });
@@ -304,8 +318,8 @@ validationRouter.get('/table', auth, (req, res) => {
     let totalRow, rows;
     if (search) {
       const like = `%${search}%`;
-      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ?').get(like, like, like);
-      rows = db.prepare('SELECT * FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, limit, offset);
+      totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? OR department LIKE ?').get(like, like, like, like);
+      rows = db.prepare('SELECT * FROM validation_table WHERE full_name LIKE ? OR staff_id LIKE ? OR phone_number LIKE ? OR department LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?').all(like, like, like, like, limit, offset);
     } else {
       totalRow = db.prepare('SELECT COUNT(*) as cnt FROM validation_table').get();
       rows = db.prepare('SELECT * FROM validation_table ORDER BY id ASC LIMIT ? OFFSET ?').all(limit, offset);
@@ -327,13 +341,16 @@ validationRouter.get('/table', auth, (req, res) => {
 validationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number FROM validation_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location FROM validation_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id', 'phone_number']
+      header: ['full_name', 'staff_id', 'phone_number', 'title', 'department', 'location']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
     ws['C1'] = { v: 'Phone Number', t: 's' };
+    ws['D1'] = { v: 'Title', t: 's' };
+    ws['E1'] = { v: 'Department', t: 's' };
+    ws['F1'] = { v: 'Location', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Validation');
@@ -392,17 +409,36 @@ validationRouter.post('/upload', auth, (req, res) => {
         });
       }
 
+      // Detect optional Title column
+      let titleCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'jobtitle');
+      if (!titleCol) titleCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'title' && k !== nameCol);
+      if (!titleCol) titleCol = keys.find(k => k.toLowerCase().includes('title') && k !== nameCol);
+
+      // Detect optional Department column
+      let deptCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'department');
+      if (!deptCol) deptCol = keys.find(k => k.toLowerCase().includes('department'));
+      if (!deptCol) deptCol = keys.find(k => k.toLowerCase().includes('dept'));
+
+      // Detect optional Location column
+      let locationCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'officelocation');
+      if (!locationCol) locationCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'location');
+      if (!locationCol) locationCol = keys.find(k => k.toLowerCase().includes('location'));
+      if (!locationCol) locationCol = keys.find(k => k.toLowerCase().includes('office') && k !== nameCol);
+
       const insertMany = db.transaction((rows) => {
         db.prepare('DELETE FROM validation_table').run();
         db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
-        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)');
+        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)');
         let insertedCount = 0;
         for (const row of rows) {
           const name = String(row[nameCol]).trim();
           const sid = String(row[idCol]).trim();
           const phone = String(row[phoneCol]).trim();
+          const title = titleCol ? String(row[titleCol] || '').trim() : '';
+          const dept = deptCol ? String(row[deptCol] || '').trim() : '';
+          const loc = locationCol ? String(row[locationCol] || '').trim() : '';
           if (name && sid) {
-            insert.run(name, sid, phone);
+            insert.run(name, sid, phone, title, dept, loc);
             insertedCount++;
           }
         }
@@ -446,13 +482,20 @@ validationRouter.post('/clear', auth, (req, res) => {
 validationRouter.post('/to-registration', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number FROM validation_table').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location FROM validation_table').all();
 
     const copyAll = db.transaction((entries) => {
-      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)');
+      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)');
       let inserted = 0;
       for (const row of entries) {
-        const result = insert.run(row.full_name, row.staff_id, row.phone_number || '');
+        const result = insert.run(
+          row.full_name,
+          row.staff_id,
+          row.phone_number || '',
+          row.title || '',
+          row.department || '',
+          row.location || ''
+        );
         if (result.changes > 0) inserted++;
       }
       return inserted;

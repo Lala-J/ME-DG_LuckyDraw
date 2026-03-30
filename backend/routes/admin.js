@@ -31,10 +31,29 @@ router.post('/login', (req, res) => {
       { expiresIn: '6h' }
     );
 
-    res.json({ success: true, token });
+    res.cookie('admin_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 6 * 60 * 60 * 1000
+    });
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
+});
+
+// POST /api/admin/logout
+router.post('/logout', (_req, res) => {
+  res.clearCookie('admin_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/'
+  });
+  res.json({ success: true });
 });
 
 // PUT /api/admin/password
@@ -62,6 +81,14 @@ router.put('/password', auth, (req, res) => {
 
     const newHash = bcrypt.hashSync(newPassword, 10);
     db.prepare('UPDATE admin SET password_hash = ? WHERE id = 1').run(newHash);
+
+    // Invalidate the current session — the admin must log in again with the new password
+    res.clearCookie('admin_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -126,6 +153,11 @@ router.post('/wipe', auth, (req, res) => {
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }
+});
+
+// GET /api/admin/verify — lightweight session check (used by frontend on mount)
+router.get('/verify', auth, (_req, res) => {
+  res.json({ authenticated: true });
 });
 
 module.exports = router;

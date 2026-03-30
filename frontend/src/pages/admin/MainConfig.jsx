@@ -5,7 +5,7 @@ import { useConfig } from '../../contexts/ConfigContext';
 import Layout from '../../components/Layout';
 
 export default function MainConfig() {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, logout } = useAuth();
   const { config, refreshConfig } = useConfig();
   const navigate = useNavigate();
 
@@ -93,7 +93,9 @@ export default function MainConfig() {
 
       setCurrentPassword('');
       setNewPassword('');
-      setMessage({ type: 'success', text: 'Password changed successfully!' });
+      // Server has cleared the session cookie — log out and redirect to login
+      logout();
+      navigate('/administrator');
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -140,7 +142,7 @@ export default function MainConfig() {
             <button className="btn btn-outline btn-small" onClick={() => navigate('/administrator/dashboard')}>
               &larr; Back
             </button>
-            <h2>Site Master</h2>
+            <h2>Website Master</h2>
           </div>
 
           {message && (

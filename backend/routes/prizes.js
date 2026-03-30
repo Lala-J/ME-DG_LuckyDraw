@@ -3,7 +3,6 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
 
@@ -154,22 +153,8 @@ router.post('/:prizeId/picture', auth, (req, res) => {
   });
 });
 
-// GET /api/prizes/:prizeId/picture — serve picture (admin only)
-// Accepts auth via Authorization header (Bearer) OR ?token= query param,
-// since <img> tags cannot attach request headers.
-router.get('/:prizeId/picture', (req, res) => {
-  const headerToken = req.headers.authorization?.startsWith('Bearer ')
-    ? req.headers.authorization.slice(7)
-    : null;
-  const tokenStr = headerToken || req.query.token || null;
-
-  if (!tokenStr) return res.status(401).json({ error: 'Authentication required' });
-  try {
-    jwt.verify(tokenStr, auth.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-
+// GET /api/prizes/:prizeId/picture — serve picture
+router.get('/:prizeId/picture', auth, (req, res) => {
   try {
     const db = getDb();
     const prize = db.prepare('SELECT * FROM prizes WHERE prize_id = ?').get(req.params.prizeId);

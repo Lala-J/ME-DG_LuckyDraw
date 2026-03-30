@@ -1,6 +1,6 @@
 # Metaelyon: Lucky Draw
 
-> **Metaelyon Lucky Draw** is a simple, web-based application created to handle a registration-powered, validation-based Lucky Draw system with an array of nifty and customisable features.
+> **Metaelyon Lucky Draw** is a web-based application for a registration-powered, validation-based Lucky Draw system with customisable branding, prize pools, and optional Microsoft 365 single-sign-on registration.
 
 ---
 
@@ -12,12 +12,15 @@
   - [1. Clone the Repository](#1-clone-the-repository)
   - [2. Configure Environment Variables](#2-configure-environment-variables)
   - [3. Build and Start the Containers](#3-build-and-start-the-containers)
-  - [4. Verify the Deployment](#4-verify-the-deployment)
 - [Security Configuration](#security-configuration)
   - [JWT Secret](#jwt-secret)
   - [Default Admin Password](#default-admin-password)
+  - [DEFAULT_SECURITY_POLICY](#default_security_policy)
   - [CORS / Allowed Origins](#cors--allowed-origins)
   - [SSL / HTTPS](#ssl--https)
+- [Microsoft 365 Registration (Azure Graph API)](#microsoft-365-registration-azure-graph-api)
+  - [Azure App Registration](#azure-app-registration)
+  - [Field Mapping](#field-mapping)
 - [Managing the Application](#managing-the-application)
 - [Data Persistence](#data-persistence)
 
@@ -25,30 +28,26 @@
 
 ## Architecture
 
-The application is composed of two Docker services orchestrated with Docker Compose:
-
 | Service | Image | Internal Port | Description |
 |---|---|---|---|
 | `luckydraw-frontend` | Built from `frontend/Dockerfile` | `80` | React SPA served via nginx |
 | `luckydraw-backend` | Built from `backend/Dockerfile` | `4000` | Express REST API + SQLite |
 
-Nginx (inside the frontend container) acts as a reverse proxy, forwarding `/api/*` and `/uploads/*` requests to the backend container over the internal Docker network. The frontend is the only service exposed to the host.
+Nginx (inside the frontend container) reverse-proxies `/api/*` and `/uploads/*` to the backend container. The frontend container is the only service exposed to the host, on the port set by `APPLICATION_PORT`.
 
 ```
-Browser → :80 (nginx) ──/api/*──→ backend:4000 (Express)
-                    └─ static   → /usr/share/nginx/html (React build)
+Browser → :APPLICATION_PORT (nginx) ──/api/*──→ backend:4000 (Express)
+                              └─ static       → /usr/share/nginx/html (React build)
 ```
 
-**Database:** SQLite via `sql.js`, persisted to a named Docker volume (`backend-data`). No separate database container is required.
+**Database:** SQLite via `sql.js`, persisted to a named Docker volume (`backend-data`).
 
 ---
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) v24+
-- [Docker Compose](https://docs.docker.com/compose/install/) v2+ (included with Docker Desktop)
-
-No Node.js, npm, or any other tooling is required on the host — everything runs inside the containers.
+- [Docker Compose](https://docs.docker.com/compose/install/) v2+
 
 ---
 
@@ -63,32 +62,38 @@ cd ME-DG_LuckyDraw
 
 ### 2. Configure Environment Variables
 
-Copy the example environment file and fill in your values:
-
 ```bash
 cp .env.example backend/.env
 ```
 
-Then open `backend/.env` and set the three required variables:
+Open `backend/.env` and configure the following:
 
 ```env
-# A cryptographically random secret used to sign JWT tokens.
-# Must be at least 32 characters. Generate one with the command below.
-JWT_SECRET=very-important-secret-dont-share-thanks
+# Signs admin session JWTs. Generate with: openssl rand -base64 48
+JWT_SECRET=
 
-# The password for the built-in admin account.
-# Set this before first launch — it is only applied when the database is first initialised.
-DEFAULT_ADMIN_PASSWORD=very-important-password-dont-share-thanks
+# Applied only on first database initialisation. Has no effect on existing deployments.
+DEFAULT_ADMIN_PASSWORD=
 
-# Comma-separated list of origins that are allowed to make API requests.
-# Set this to the URL(s) your users will access the site from.
-ALLOWED_ORIGINS=http://localhost
+# Comma-separated list of origins permitted to call the API (no spaces).
+ALLOWED_ORIGINS=https://luckydraw.example.com
 
-# Leave as production unless running locally for development.
-NODE_ENV=production
+# Host port the nginx container binds to.
+APPLICATION_PORT=8900
+
+# Prevents startup if ALLOWED_ORIGINS or AZURE_REDIRECT_URI use HTTP in production.
+# Also enables the HSTS header. Set to false only for local dev or when you're
+# certain HTTPS is enforced upstream.
+DEFAULT_SECURITY_POLICY=true
+
+# --- Optional: Microsoft 365 registration via Azure Graph API ---
+# Leave all four blank to disable the feature (the Sign in with Microsoft
+# button will return a graceful error to the user).
+AZURE_CLIENT_ID=
+AZURE_TENANT_ID=
+AZURE_CLIENT_SECRET=
+AZURE_REDIRECT_URI=https://luckydraw.example.com/api/auth/microsoft/callback
 ```
-
-> **Important:** I know this is probably obvious, but I have to say it anyways. The `backend/.env` file is listed in `.gitignore` and must never be committed to source control.
 
 ### 3. Build and Start the Containers
 
@@ -96,24 +101,7 @@ NODE_ENV=production
 docker compose up -d --build
 ```
 
-This command builds both images from source and starts the services in the background. On first start, the backend automatically creates and seeds the SQLite database with default configuration and the admin account.
-
-### 4. Verify the Deployment
-
-```bash
-# Check that both services are running
-docker compose ps
-
-# Tail logs from all services
-docker compose logs -f
-
-# Check the backend health endpoint
-curl http://localhost/api/health
-```
-
-The application will be available at **http://localhost** (or your server's IP / domain).
-
-The admin panel is accessible at **/administrator** — log in with the password you set for `DEFAULT_ADMIN_PASSWORD`.
+The admin panel is at **/administrator**.
 
 ---
 
@@ -121,75 +109,85 @@ The admin panel is accessible at **/administrator** — log in with the password
 
 ### JWT Secret
 
-JWT tokens are used to authenticate admin panel sessions. The `JWT_SECRET` value must be:
+Admin sessions are issued as signed JWTs and delivered to the browser as an **HttpOnly; Secure; SameSite=Strict** cookie. The token is never readable by JavaScript. Sessions expire after 6 hours and are invalidated server-side on logout and on password change.
 
-- **Random** — do not use a dictionary word or a predictable string.
-- **At least 32 Characters** — shorter secrets are rejected at startup.
-- **Kept private** — treat it like a password; rotate it if it is ever exposed.
-
-Generate a suitable secret with:
-
-```bash
-openssl rand -base64 48
-```
-
-If `JWT_SECRET` is not set, the backend will refuse to start entirely.
+The backend refuses to start if `JWT_SECRET` is not set.
 
 ### Default Admin Password
 
-The `DEFAULT_ADMIN_PASSWORD` is hashed with bcrypt and written to the database only on the **first initialisation** (i.e., when the database file does not yet exist). After that, changing this variable has no effect on an existing deployment.
+`DEFAULT_ADMIN_PASSWORD` is bcrypt-hashed and written to the database only on **first initialisation**. Once the database exists, changing this variable has no effect. To reset a forgotten password, delete the `backend-data` volume and restart — **this also deletes all registrations and draw results**.
 
-Recommendations:
+The minimum accepted password length is 12 characters.
 
-- Use a minimum of 12 characters with a mix of uppercase, lowercase, digits, and symbols.
-- Change the password through the admin panel after the first login.
-- If you need to reset a forgotten password, delete the `backend-data` Docker volume and restart — **this will also delete all registrations and draw results**.
+### DEFAULT_SECURITY_POLICY
+
+When set to `true` (the default), the backend enforces the following at startup in any environment where `NODE_ENV` is not `development`:
+
+- Every origin in `ALLOWED_ORIGINS` must use `https://` (localhost and 127.0.0.1 are exempt).
+- `AZURE_REDIRECT_URI`, if set, must use `https://`.
+
+If either condition is not met, the backend exits with a descriptive error rather than starting insecurely.
+
+Setting `DEFAULT_SECURITY_POLICY=true` also enables the **HSTS header** (`Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`) on all responses. This requires your reverse proxy to be terminating HTTPS — the header has no effect otherwise.
+
+Set to `false` only for local development or when HTTPS enforcement is handled at a layer that doesn't require the application to know about it.
 
 ### CORS / Allowed Origins
 
-The `ALLOWED_ORIGINS` variable controls which browser origins are permitted to call the API. Set this to the exact URL(s) your users will use:
+`ALLOWED_ORIGINS` is a comma-separated list with no spaces. Set it to the exact URL(s) your users will access the application from:
 
 ```env
-# Single origin
 ALLOWED_ORIGINS=https://luckydraw.example.com
-
-# Multiple origins (comma-separated, no spaces)
+# or multiple:
 ALLOWED_ORIGINS=https://luckydraw.example.com,https://admin.example.com
 ```
 
-Leaving this set to `http://localhost` in a production deployment will cause API calls from your real domain to be blocked.
-
 ### SSL / HTTPS
 
-> **The application does not include SSL termination out of the box.** The nginx container listens on port `80` (HTTP) only.
+The application does not include SSL termination. The nginx container listens on HTTP only; TLS must be handled upstream.
 
-For a production or internet-facing deployment, HTTPS is strongly recommended. Choose one of the following approaches:
-
-#### Option A — Reverse Proxy on the Host (Recommended)
-
-Place a reverse proxy such as **nginx**, **Caddy**, or **Traefik** on the host machine in front of the Docker container. These tools can obtain and renew Let's Encrypt certificates automatically.
-
-Example with Caddy (simplest):
+**Option A — Host reverse proxy (recommended):** Place nginx, Caddy, or Traefik on the host in front of `APPLICATION_PORT`. Caddy handles certificate provisioning automatically:
 
 ```
 luckydraw.example.com {
-    reverse_proxy localhost:80
+    reverse_proxy localhost:8900
 }
 ```
 
-Caddy handles certificate provisioning with zero additional configuration.
+**Option B — Cloud/CDN TLS termination:** Deploy behind an AWS ALB, Cloudflare proxy, or equivalent. No container changes needed; the nginx config already forwards `X-Forwarded-Proto` to the backend.
 
-#### Option B — Expose HTTPS Directly from the Container
+---
 
-Modify `frontend/nginx.conf` to add a `listen 443 ssl` block and mount your certificate files as Docker volumes. This requires you to manage certificate renewal yourself.
+## Microsoft 365 Registration (Azure Graph API)
 
-#### Option C — Cloud / Hosting Provider Termination
+When configured, the registration page shows a **Sign in with Microsoft** button. The entire OAuth flow runs server-side — no access tokens, Graph API responses, or user profile data are ever forwarded to the browser. The browser receives only an opaque, single-use, 60-second JWT that encodes success or an error code.
 
-If the application is deployed behind a load balancer or CDN (AWS ALB, Cloudflare, etc.) that handles TLS termination, no changes to the container are needed. Ensure the `X-Forwarded-Proto` header is forwarded correctly — the nginx config already passes it through to the backend.
+On a successful sign-in, the user's profile data is validated against the Validation Table and the registration is recorded using the data from the Validation Table — not from Graph API.
 
-**Regardless of which option you choose**, once HTTPS is in use:
-- Update `ALLOWED_ORIGINS` to use `https://` URLs.
-- Access the admin panel only over HTTPS to prevent token interception.
+### Azure App Registration
+
+1. Create an App Registration in [Entra ID](https://entra.microsoft.com).
+2. Under **Authentication**, add a Redirect URI of type **Web**:
+   ```
+   https://yourdomain.com/api/auth/microsoft/callback
+   ```
+   This must exactly match `AZURE_REDIRECT_URI` in your `.env`.
+3. Under **API permissions**, add a **Delegated** permission: `User.Read`.
+4. Generate a **Client Secret** under **Certificates & secrets**.
+5. Copy the **Application (client) ID**, **Directory (tenant) ID**, and the client secret value into your `.env`.
+
+If any of the four Azure variables are missing, the feature is disabled at runtime and the button returns a graceful error — no server crash occurs.
+
+### Field Mapping
+
+By default, the backend maps:
+
+| Graph field | Registration field |
+|---|---|
+| `displayName` | Full Name |
+| `mobilePhone` | Phone Number |
+
+To use different Graph fields, edit `backend/routes/auth.js` at the two lines marked `FIELD MAPPING` (around line 206) and update the `$select` query on the line above them accordingly. The required Graph API scope may also need to be updated depending on which fields you add.
 
 ---
 
@@ -199,17 +197,17 @@ If the application is deployed behind a load balancer or CDN (AWS ALB, Cloudflar
 # Stop all services
 docker compose down
 
-# Stop and remove volumes (DELETES ALL DATA — registrations, results, uploads)
+# Stop and remove volumes (DELETES ALL DATA)
 docker compose down -v
 
-# Rebuild images after a code change
+# Rebuild after a code change
 docker compose up -d --build
 
-# View logs for a specific service
+# Tail logs
 docker compose logs -f luckydraw-backend
 docker compose logs -f luckydraw-frontend
 
-# Open a shell inside a running container
+# Shell into a container
 docker compose exec luckydraw-backend sh
 ```
 
@@ -217,14 +215,12 @@ docker compose exec luckydraw-backend sh
 
 ## Data Persistence
 
-Two named Docker volumes store application data:
-
 | Volume | Mounted at | Contents |
 |---|---|---|
 | `backend-data` | `/app/data` | SQLite database (`luckydraw.db`) |
-| `backend-uploads` | `/app/uploads` | Uploaded logo / asset files |
+| `backend-uploads` | `/app/uploads` | Uploaded logo and asset files |
 
-These volumes survive container restarts and image rebuilds. To back up the database, copy the `luckydraw.db` file out of the volume:
+To back up the database:
 
 ```bash
 docker run --rm \
@@ -235,4 +231,4 @@ docker run --rm \
 
 ---
 
-© Metaelyon LLC  |  2026 – For Eternity | MIT Licence
+© Metaelyon LLC | 2026 – For Eternity | MIT Licence

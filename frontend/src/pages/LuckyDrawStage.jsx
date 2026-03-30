@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export default function LuckyDrawStage() {
   // stage states: standby | rolling | revealing | reveal | intermission | complete
   const [state, setState] = useState('standby');
-  const [adminToken] = useState(() => localStorage.getItem('admin_token'));
   const [currentRound, setCurrentRound] = useState(null);
   const [currentRoundName, setCurrentRoundName] = useState('');
   const [nextRound, setNextRound] = useState(null);
@@ -46,11 +45,7 @@ export default function LuckyDrawStage() {
 
   // Fetch registration names for roulette animation
   useEffect(() => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) return;
-    fetch('/api/registration/table?page=1&limit=500', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    fetch('/api/registration/table?page=1&limit=500')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data && Array.isArray(data.data) && data.data.length > 0) {
@@ -426,9 +421,7 @@ export default function LuckyDrawStage() {
                 <div className="winner-prize-right">
                   <div className="winner-prize-img">
                     <img
-                      src={currentRevealingWinner.prizePicture
-                        ? currentRevealingWinner.prizePicture + '?token=' + encodeURIComponent(adminToken || '')
-                        : '/RewardsFallback.png'}
+                      src={currentRevealingWinner.prizePicture || '/RewardsFallback.png'}
                       alt={currentRevealingWinner.prizeName || ''}
                       onError={(e) => { e.target.src = '/RewardsFallback.png'; }}
                     />
