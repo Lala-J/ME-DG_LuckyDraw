@@ -17,6 +17,10 @@ export default function LuckyDrawStage() {
   const [bgConfig, setBgConfig] = useState({
     color1: '#667eea', color2: '#764ba2', color3: '#f093fb', speed: '8'
   });
+  const [winnerCardConfig, setWinnerCardConfig] = useState({
+    enabled: false,
+    fields: ['full_name', 'staff_id', 'disabled', 'disabled']
+  });
 
   const channelRef = useRef(null);
   const rollingIntervalRef = useRef(null);
@@ -26,7 +30,7 @@ export default function LuckyDrawStage() {
   const revealTimerRef = useRef(null);
   const revealCancelRef = useRef(false);
 
-  // Fetch site config for gradient
+  // Fetch site config for gradient + winner card experimental settings
   useEffect(() => {
     fetch('/api/config')
       .then(r => r.ok ? r.json() : null)
@@ -37,6 +41,15 @@ export default function LuckyDrawStage() {
             color2: data.bg_color2 || '#764ba2',
             color3: data.bg_color3 || '#f093fb',
             speed: data.bg_animation_speed || '8'
+          });
+          setWinnerCardConfig({
+            enabled: data.exp_winner_card_enabled === '1',
+            fields: [
+              data.exp_winner_card_field1 || 'full_name',
+              data.exp_winner_card_field2 || 'staff_id',
+              data.exp_winner_card_field3 || 'disabled',
+              data.exp_winner_card_field4 || 'disabled',
+            ]
           });
         }
       })
@@ -158,6 +171,26 @@ export default function LuckyDrawStage() {
         const pool = registrationNamesRef.current.length > 0
           ? registrationNamesRef.current
           : ['Loading...'];
+
+        // Re-fetch config so Winner Card experimental settings are always fresh,
+        // even if the admin changed them after this window was opened.
+        fetch('/api/config')
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data) {
+              setWinnerCardConfig({
+                enabled: data.exp_winner_card_enabled === '1',
+                fields: [
+                  data.exp_winner_card_field1 || 'full_name',
+                  data.exp_winner_card_field2 || 'staff_id',
+                  data.exp_winner_card_field3 || 'disabled',
+                  data.exp_winner_card_field4 || 'disabled',
+                ]
+              });
+            }
+          })
+          .catch(() => {});
+
         revealWinners(winnersList, roundNumber, roundName, total, pool);
       }
     };
@@ -213,8 +246,16 @@ export default function LuckyDrawStage() {
           100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes winnerSlideIn {
-          0% { opacity: 0; transform: scale(0.92) translateY(24px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
+          0% { opacity: 0; transform: translateX(80px); }
+          100% { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Dynamic field entries inside the winner prize card left panel */
+        .winner-field {
+          overflow-wrap: break-word;
+          word-break: break-word;
+          line-height: 1.25;
+          max-width: 100%;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -412,29 +453,49 @@ export default function LuckyDrawStage() {
         ) : state === 'revealing' ? (
           <div className="stage-revealing">
             <div className="round-label">{currentRoundName || `ROUND ${currentRound}`}</div>
-            {currentRevealingWinner && (
-              <div className="winner-prize-card">
-                <div className="winner-prize-left">
-                  <div className="winner-name">{currentRevealingWinner.fullName || currentRevealingWinner.name}</div>
-                  <div className="winner-id">{currentRevealingWinner.staffId}</div>
-                </div>
-                <div className="winner-prize-right">
-                  <div className="winner-prize-img">
-                    <img
-                      src={currentRevealingWinner.prizePicture || '/RewardsFallback.png'}
-                      alt={currentRevealingWinner.prizeName || ''}
-                      onError={(e) => { e.target.src = '/RewardsFallback.png'; }}
-                    />
+            {currentRevealingWinner && (() => {
+              const w = currentRevealingWinner;
+              const fieldMap = {
+                full_name:  w.fullName  || w.name || '',
+                staff_id:   w.staffId   || '',
+                title:      w.title     || '',
+                department: w.department || '',
+                location:   w.location  || '',
+              };
+              const activeFields = winnerCardConfig.enabled
+                ? winnerCardConfig.fields.filter(f => f !== 'disabled')
+                : ['full_name', 'staff_id'];
+              return (
+                <div key={w.staffId + (w.prizeId || '')} className="winner-prize-card">
+                  <div className="winner-prize-left">
+                    {activeFields.map((field, idx) => (
+                      <div
+                        key={field}
+                        className={idx === 0 ? 'winner-name winner-field' : 'winner-id winner-field'}
+                        style={{ fontSize: idx === 0 ? 'clamp(1rem, 3.5vw, 2.2rem)' : 'clamp(0.7rem, 1.8vw, 1.3rem)' }}
+                      >
+                        {fieldMap[field]}
+                      </div>
+                    ))}
                   </div>
-                  {currentRevealingWinner.prizeName && (
-                    <div className="winner-prize-name">{currentRevealingWinner.prizeName}</div>
-                  )}
-                  {currentRevealingWinner.prizeId && (
-                    <div className="winner-prize-id">{currentRevealingWinner.prizeId}</div>
-                  )}
+                  <div className="winner-prize-right">
+                    <div className="winner-prize-img">
+                      <img
+                        src={w.prizePicture || '/RewardsFallback.png'}
+                        alt={w.prizeName || ''}
+                        onError={(e) => { e.target.src = '/RewardsFallback.png'; }}
+                      />
+                    </div>
+                    {w.prizeName && (
+                      <div className="winner-prize-name" style={{ fontSize: 'clamp(0.7rem, 1.5vw, 1.1rem)' }}>{w.prizeName}</div>
+                    )}
+                    {w.prizeId && (
+                      <div className="winner-prize-id">{w.prizeId}</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
         ) : state === 'reveal' ? (

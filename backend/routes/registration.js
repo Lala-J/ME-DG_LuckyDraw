@@ -7,6 +7,7 @@ const XLSX = require('xlsx');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
+const { emitter, broadcastStatusChange } = require('../events');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -87,6 +88,40 @@ registrationRouter.get('/status', (req, res) => {
   }
 });
 
+// GET /api/registration/status/stream — Server-Sent Events for real-time status updates
+registrationRouter.get('/status/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  // Disable nginx/proxy response buffering so events reach the client immediately
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Send current status immediately so the client is up-to-date on connect
+  try {
+    const db = getDb();
+    const openRow = db.prepare("SELECT value FROM config WHERE key = 'registration_open'").get();
+    const endRow  = db.prepare("SELECT value FROM config WHERE key = 'registration_end_time'").get();
+    const isOpen  = !!(openRow && openRow.value === '1');
+    const endTime = (endRow && endRow.value) || null;
+    res.write(`data: ${JSON.stringify({ open: isOpen, endTime })}\n\n`);
+  } catch (_) {}
+
+  // Push future status changes
+  const onStatusChange = (status) => {
+    res.write(`data: ${JSON.stringify(status)}\n\n`);
+  };
+  emitter.on('registrationStatus', onStatusChange);
+
+  // Heartbeat every 25 s — keeps the connection alive through proxies/firewalls
+  const heartbeat = setInterval(() => { res.write(': heartbeat\n\n'); }, 25000);
+
+  req.on('close', () => {
+    emitter.off('registrationStatus', onStatusChange);
+    clearInterval(heartbeat);
+  });
+});
+
 // POST /api/registration/open - open registration with duration (auth required)
 registrationRouter.post('/open', auth, (req, res) => {
   try {
@@ -103,6 +138,7 @@ registrationRouter.post('/open', auth, (req, res) => {
     upsert.run('registration_open', '1');
     upsert.run('registration_end_time', endTime);
 
+    broadcastStatusChange({ open: true, endTime });
     res.json({ success: true, endTime });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -114,6 +150,7 @@ registrationRouter.post('/close', auth, (req, res) => {
   try {
     const db = getDb();
     db.prepare("INSERT INTO config (key, value) VALUES ('registration_open', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+    broadcastStatusChange({ open: false, endTime: null });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });

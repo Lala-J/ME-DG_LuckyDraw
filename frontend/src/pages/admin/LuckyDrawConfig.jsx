@@ -615,19 +615,36 @@ export default function LuckyDrawConfig() {
     });
   };
 
-  // Delete Round
-  const handleDeleteRound = async (roundNumber) => {
-    try {
-      const res = await fetch(`/api/luckydraw/rounds/${roundNumber}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete round');
-      await fetchAll();
-      showMessage('success', `Round ${roundNumber} deleted.`);
-    } catch (err) {
-      showMessage('error', err.message);
-    }
+  // Delete Round (password required)
+  const handleDeleteRound = (roundNumber) => {
+    setPwModal({
+      title: `Confirm Delete — Round ${roundNumber}`,
+      onConfirm: async () => {
+        setPwModal(null);
+        try {
+          const res = await fetch(`/api/luckydraw/rounds/${roundNumber}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+          });
+          if (!res.ok) throw new Error((await res.json()).error || 'Failed to delete round');
+          await fetchAll();
+          showMessage('success', `Round ${roundNumber} deleted.`);
+        } catch (err) {
+          showMessage('error', err.message);
+        }
+      }
+    });
+  };
+
+  // Configure Prizes (password required)
+  const handleConfigPrizes = (roundNumber) => {
+    setPwModal({
+      title: `Enter Admin Password to Configure Prizes — Round ${roundNumber}`,
+      onConfirm: () => {
+        setPwModal(null);
+        setConfigPrizesRound(roundNumber);
+      }
+    });
   };
 
   // Reset Lucky Draw (password required)
@@ -794,7 +811,7 @@ export default function LuckyDrawConfig() {
                   onRunRoulette={handleRunRoulette}
                   onRedraw={handleRedraw}
                   onDeleteRound={handleDeleteRound}
-                  onConfigPrizes={(rn) => setConfigPrizesRound(rn)}
+                  onConfigPrizes={handleConfigPrizes}
                   onNameBlur={handleNameBlur}
                 />
               ))}

@@ -7,21 +7,19 @@ export function AuthProvider({ children }) {
   // cookie set by the server. The flag is cleared on tab close or explicit logout.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // isVerifying is true only when the stored flag claims the user is logged in.
-  // While true, ProtectedRoute renders nothing to prevent the admin UI from
-  // showing before the server confirms the session is valid.
-  const [isVerifying, setIsVerifying] = useState(
-    () => sessionStorage.getItem('admin_logged_in') === 'true'
-  );
+  // isVerifying is true on every mount while we confirm the session server-side.
+  // ProtectedRoute renders nothing during this window to prevent the admin UI
+  // from flashing before the server confirms the HttpOnly cookie is valid.
+  const [isVerifying, setIsVerifying] = useState(true);
 
   useEffect(() => {
-    // If the stored flag is not set there is nothing to verify.
-    if (sessionStorage.getItem('admin_logged_in') !== 'true') return;
-
-    // Confirm the HttpOnly cookie is present and valid server-side.
+    // Always confirm the HttpOnly cookie is present and valid server-side,
+    // regardless of the sessionStorage flag. This prevents an attacker who
+    // manipulates sessionStorage from bypassing the server check.
     fetch('/api/admin/verify')
       .then(res => {
         if (res.ok) {
+          sessionStorage.setItem('admin_logged_in', 'true');
           setIsAuthenticated(true);
         } else {
           sessionStorage.removeItem('admin_logged_in');

@@ -97,10 +97,12 @@ function serializeWrite(fn) {
   return result;
 }
 
-// Build the opaque result redirect token
+// Build the opaque result redirect token.
+// type: 'auth_result' ensures these tokens are rejected by the admin auth
+// middleware even though they are signed with the same JWT_SECRET.
 function makeResultToken(result) {
   return jwt.sign(
-    { r: result, jti: crypto.randomBytes(8).toString('hex') },
+    { type: 'auth_result', r: result, jti: crypto.randomBytes(8).toString('hex') },
     JWT_SECRET,
     { expiresIn: '60s' }
   );
@@ -111,7 +113,7 @@ function makeResultToken(result) {
 router.get('/microsoft/login', (_req, res) => {
   if (!CLIENT_ID || !TENANT_ID || !REDIRECT_URI || !CLIENT_SECRET) {
     // MS Graph not configured — redirect back with a 501 result token
-    return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+    return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
   }
 
   const state = crypto.randomBytes(16).toString('hex');
@@ -138,14 +140,14 @@ router.get('/microsoft/callback', async (_req, res) => {
     const { code, state, error } = req.query;
 
     if (error || !code || !state) {
-      return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+      return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
 
     // CSRF: validate state
     const stateEntry = pendingStates.get(state);
     if (!stateEntry || stateEntry.expires < Date.now()) {
       pendingStates.delete(state);
-      return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+      return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
     pendingStates.delete(state);
 
@@ -166,7 +168,7 @@ router.get('/microsoft/callback', async (_req, res) => {
     );
 
     if (tokenRes.status !== 200 || !tokenRes.body.access_token) {
-      return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+      return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
 
     const accessToken = tokenRes.body.access_token;
@@ -186,7 +188,7 @@ router.get('/microsoft/callback', async (_req, res) => {
 
     // Access token is no longer needed
     if (profileRes.status !== 200) {
-      return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+      return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
 
     // FIELD MAPPING — adjust these two lines if your Graph fields differ
@@ -195,7 +197,7 @@ router.get('/microsoft/callback', async (_req, res) => {
 
     if (!graphFullName || !graphPhone) {
       // Profile incomplete — cannot validate
-      return res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err406'))}`);
+      return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err406'))}`);
     }
 
     // Validate & register (serialised to prevent race conditions)
@@ -226,7 +228,7 @@ router.get('/microsoft/callback', async (_req, res) => {
 
       // Duplicate check
       const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(validationRow.staff_id);
-      if (existing) return 'err406';
+      if (existing) return 'err_dup';
 
       // Register — store data from validation_table, never from Graph API
       db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
@@ -240,12 +242,12 @@ router.get('/microsoft/callback', async (_req, res) => {
 
     // Redirect back to the frontend with an opaque, short-lived result token.
     // The token contains only 'success' or an error code string — no user data.
-    res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken(outcome))}`);
+    res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken(outcome))}`);
 
   } catch (err) {
     console.error('[auth] Microsoft callback error:', err.message || 'unknown');
     // Never expose internal error details
-    res.redirect(`/registration?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
+    res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
   }
 });
 
@@ -258,7 +260,12 @@ router.post('/microsoft/verify', (req, res) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-    const { r: result, jti } = decoded;
+    const { type, r: result, jti } = decoded;
+
+    // Reject anything that is not an auth result token (e.g. a leaked admin token).
+    if (type !== 'auth_result') {
+      return res.status(400).json({ success: false, errorCode: 400 });
+    }
 
     // One-time-use enforcement
     if (usedJtis.has(jti)) {
@@ -267,6 +274,7 @@ router.post('/microsoft/verify', (req, res) => {
     usedJtis.add(jti);
 
     if (result === 'success') return res.json({ success: true });
+    if (result === 'err_dup') return res.json({ success: false, errorCode: 409 });
     if (result === 'err406') return res.json({ success: false, errorCode: 406 });
     return res.json({ success: false, errorCode: 501 });
 

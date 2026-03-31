@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
-const { JWT_SECRET } = require('../middleware/auth');
+const { JWT_SECRET, ADMIN_COOKIE_NAME } = require('../middleware/auth');
 
 // POST /api/admin/login
 router.post('/login', (req, res) => {
@@ -26,12 +26,12 @@ router.post('/login', (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin.id, username: admin.username },
+      { type: 'admin', id: admin.id, username: admin.username },
       JWT_SECRET,
       { expiresIn: '6h' }
     );
 
-    res.cookie('admin_token', token, {
+    res.cookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -47,7 +47,7 @@ router.post('/login', (req, res) => {
 
 // POST /api/admin/logout
 router.post('/logout', (_req, res) => {
-  res.clearCookie('admin_token', {
+  res.clearCookie(ADMIN_COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -83,7 +83,7 @@ router.put('/password', auth, (req, res) => {
     db.prepare('UPDATE admin SET password_hash = ? WHERE id = 1').run(newHash);
 
     // Invalidate the current session — the admin must log in again with the new password
-    res.clearCookie('admin_token', {
+    res.clearCookie(ADMIN_COOKIE_NAME, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

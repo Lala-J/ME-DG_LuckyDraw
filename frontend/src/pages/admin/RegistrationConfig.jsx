@@ -4,6 +4,69 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import Layout from '../../components/Layout';
 
+// Password Confirm Modal
+function PasswordModal({ title, onConfirm, onCancel }) {
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onConfirm();
+      } else {
+        setError('Incorrect password.');
+      }
+    } catch {
+      setError('Network error.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="pw-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="glass-card pw-modal-card">
+        <h3>{title}</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <input
+              ref={inputRef}
+              type="password"
+              className="form-input"
+              placeholder="Admin Password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              required
+            />
+          </div>
+          {error && <div className="message-box message-error" style={{ marginBottom: '0.75rem' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+              {loading ? 'Verifying…' : 'Confirm'}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={onCancel}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const LIMIT = 30;
 
 // Table Popup Window
@@ -167,6 +230,12 @@ export default function RegistrationConfig() {
   const [uploading, setUploading] = useState(false);
   const [copying, setCopying] = useState(false);
   const [starting, setStarting] = useState(false);
+
+  // Password modal
+  const [pwModal, setPwModal] = useState(null); // { title, onConfirm }
+
+  // Hidden file input ref for upload-after-auth flow
+  const uploadInputRef = useRef(null);
 
   const [deleteValidationConfirm, setDeleteValidationConfirm] = useState(false);
   const [deleteValidationPassword, setDeleteValidationPassword] = useState('');
@@ -659,13 +728,28 @@ export default function RegistrationConfig() {
             <div className="reg-action-row">
               <div className="form-group">
                 <label className="form-label">Upload Validation Table (Excel)</label>
+                {/* Hidden real file input — triggered after password auth */}
                 <input
+                  ref={uploadInputRef}
                   type="file"
                   className="form-input form-file"
                   accept=".xlsx,.xls,.csv"
                   onChange={handleUpload}
                   disabled={uploading}
+                  style={{ display: 'none' }}
                 />
+                <button
+                  type="button"
+                  className="form-input form-file btn"
+                  style={{ textAlign: 'left', cursor: uploading ? 'not-allowed' : 'pointer' }}
+                  disabled={uploading}
+                  onClick={() => setPwModal({
+                    title: 'Enter Admin Password to Upload Validation Table',
+                    onConfirm: () => { setPwModal(null); uploadInputRef.current?.click(); }
+                  })}
+                >
+                  {uploading ? 'Uploading…' : 'Choose File…'}
+                </button>
               </div>
               <button className="btn btn-primary reg-action-btn" onClick={handleCopyToRegistration} disabled={copying}>
                 {copying ? 'Copying...' : 'Copy Validation to Registration'}
@@ -809,6 +893,15 @@ export default function RegistrationConfig() {
           onClose={() => setRegistrationPopupOpen(false)}
           renderCell={renderRegistrationPopupCell}
           startIndex={(registrationPopupPage - 1) * LIMIT}
+        />
+      )}
+
+      {/* Password Modal */}
+      {pwModal && (
+        <PasswordModal
+          title={pwModal.title}
+          onConfirm={pwModal.onConfirm}
+          onCancel={() => setPwModal(null)}
         />
       )}
     </Layout>

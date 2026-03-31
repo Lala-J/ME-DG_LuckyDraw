@@ -201,6 +201,9 @@ router.post('/run/:roundNumber', auth, (req, res) => {
       registrationId: w.id,
       fullName: w.full_name,
       staffId: w.staff_id,
+      title: w.title || '',
+      department: w.department || '',
+      location: w.location || '',
       prizeId: shuffledPrizes[i].prize_id,
       prizeName: shuffledPrizes[i].name,
       prizePicture: shuffledPrizes[i].picture_filename ? `/api/prizes/${shuffledPrizes[i].prize_id}/picture` : null

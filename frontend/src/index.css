@@ -457,9 +457,6 @@ h1, h2, h3, h4, h5, h6 {
   white-space: pre-wrap;
 }
 
-.home-register-btn {
-  margin-bottom: 1rem;
-}
 
 .home-subtitle {
   font-size: 1.05rem;
@@ -568,7 +565,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  width: 50%;
   min-height: 60vh;
   padding: 1rem 2rem;
 }
@@ -1479,14 +1476,28 @@ h1, h2, h3, h4, h5, h6 {
 
 .reg-login-buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 1rem;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+}
+
+/* Home page button row — equal spacing above (heading) and below (subtitle) */
+.home-reg-buttons {
+  margin-bottom: 1.5rem;
+}
+
+/* Greyed-out state when registrations are closed */
+.reg-buttons-disabled {
+  filter: grayscale(1);
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 /* Microsoft / Office 365 button — primary / larger, glassy orange */
 .reg-btn-o365 {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 1rem 2rem;
   font-size: 1.1rem;
   background: rgba(216, 58, 1, 0.836);
@@ -1510,27 +1521,30 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateY(-2px);
 }
 
-/* Manual Registration button — smaller / secondary */
+/* Manual Registration button — gray, same height as O365 */
 .reg-btn-manual {
-  width: 100%;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.82rem;
-  background: rgba(255, 255, 255, 0.1);
+  flex: 1;
+  min-width: 0;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  background: rgb(88, 88, 88);
   color: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(200, 200, 200, 0.35);
+  gap: 0.65rem;
 }
 
 .theme-light-bg .reg-btn-manual {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(100, 100, 100, 0.1);
   border-color: rgba(0, 0, 0, 0.15);
 }
 
 .reg-btn-manual:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgb(128, 128, 128);
+  transform: translateY(-2px);
 }
 
 .theme-light-bg .reg-btn-manual:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 /* ========== Manual Entry Modal ========== */
@@ -1616,6 +1630,52 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0;
 }
 
+/* ========== Toast Notification ========== */
+.reg-toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  z-index: 200;
+  padding: 0.8rem 1.75rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  max-width: calc(100vw - 2rem);
+  white-space: normal;
+}
+
+.reg-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.reg-toast--success {
+  background: rgba(30, 160, 90, 0.92);
+  border: 1px solid rgba(46, 204, 113, 0.5);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(46, 204, 113, 0.35);
+}
+
+.reg-toast--error {
+  background: rgba(200, 50, 40, 0.92);
+  border: 1px solid rgba(231, 76, 60, 0.5);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(231, 76, 60, 0.35);
+}
+
+.reg-toast--info {
+  background: rgba(80, 100, 210, 0.92);
+  border: 1px solid rgba(102, 126, 234, 0.5);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.35);
+}
+
 /* ========== Registration Master Action Block ========== */
 /*
   Two rows stacked:
@@ -1667,6 +1727,8 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
   justify-content: center;
   text-align: center;
+  /* Match form-input border so heights are identical */
+  border: 1px solid transparent;
 }
 
 /* ========== Download Table button (gradient green) ========== */
@@ -1812,6 +1874,292 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
 }
 
+/* ========== Experimental Features Page ========== */
+
+/* Section divider: ——— LABEL ——— */
+.exp-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0 1.25rem;
+}
+.exp-section-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.2);
+}
+.theme-light-bg .exp-section-divider-line {
+  background: rgba(0,0,0,0.12);
+}
+.exp-section-divider-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+/* 3-column grid of feature buttons */
+.exp-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.exp-feature-btn {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  font-size: 0.95rem;
+}
+
+/* Construction modal body */
+.exp-construction-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  min-height: 200px;
+  text-align: center;
+  padding: 3rem 2rem;
+}
+.exp-construction-icon {
+  font-size: 3.5rem;
+  line-height: 1;
+}
+.exp-construction-text {
+  font-size: 1.05rem;
+  opacity: 0.8;
+  max-width: 460px;
+  line-height: 1.7;
+}
+
+/* On/Off toggle in header right corner */
+.exp-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+.exp-toggle-label-text {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #e74c3c;
+  transition: color 0.3s;
+}
+.exp-toggle-label-text--on {
+  color: #2ecc71;
+}
+.exp-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+  cursor: pointer;
+}
+.exp-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.exp-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #e74c3c;
+  border-radius: 24px;
+  transition: background 0.3s;
+}
+.exp-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+.exp-toggle-switch input:checked + .exp-toggle-slider {
+  background: #2ecc71;
+}
+.exp-toggle-switch input:checked + .exp-toggle-slider::before {
+  transform: translateX(22px);
+}
+
+/* Card wrapper — centres the preview card */
+.exp-card-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.exp-card-container {
+  position: relative;
+  width: 100%;
+  max-width: 860px;
+}
+
+/* Preview winner card (mirrors .winner-prize-card from LuckyDrawStage) */
+.exp-winner-preview-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+}
+.theme-light-bg .exp-winner-preview-card {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.12);
+}
+
+/* Left panel: dropdowns + preview text */
+.exp-winner-preview-left {
+  flex: 1;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  justify-content: center;
+  border-right: 1px solid rgba(255,255,255,0.12);
+}
+.theme-light-bg .exp-winner-preview-left {
+  border-right-color: rgba(0,0,0,0.08);
+}
+.exp-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.exp-field-select {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: inherit;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  appearance: auto;
+}
+.theme-light-bg .exp-field-select {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.15);
+  color: inherit;
+}
+.exp-field-select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.exp-field-select option {
+  background: #2a2a4a;
+  color: #fff;
+}
+.exp-field-select--primary {
+  border-color: rgba(102,126,234,0.5);
+}
+.exp-field-preview-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1rem;
+  opacity: 0.65;
+  padding-left: 0.25rem;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.exp-field-preview-text--primary {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  opacity: 1;
+}
+
+/* Right panel: prize image placeholder */
+.exp-winner-preview-right {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  background: rgba(0,0,0,0.1);
+}
+.exp-winner-preview-img {
+  width: 100%;
+  aspect-ratio: 7/3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.exp-winner-preview-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.exp-winner-preview-prize-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+.exp-winner-preview-prize-id {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  opacity: 0.45;
+  letter-spacing: 0.06em;
+}
+
+/* Shimmer overlay when disabled */
+@keyframes exp-shimmer-move {
+  0%   { transform: translateX(-150%) skewX(-15deg); }
+  100% { transform: translateX(250%)  skewX(-15deg); }
+}
+.exp-shimmer-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.exp-shimmer-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.18) 50%,
+    transparent 100%
+  );
+  animation: exp-shimmer-move 2s ease-in-out infinite;
+}
+
+/* Warning text below card */
+.exp-winner-warning {
+  text-align: center;
+  font-size: 0.82rem;
+  opacity: 0.55;
+  max-width: 700px;
+  margin: 0 auto;
+  line-height: 1.6;
+  font-style: italic;
+}
+
 /* ========== Responsive ========== */
 @media (max-width: 600px) {
   .dashboard-grid {
@@ -1836,6 +2184,10 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .round-controls {
+    flex-direction: column;
+  }
+
+  .home-reg-buttons {
     flex-direction: column;
   }
 }

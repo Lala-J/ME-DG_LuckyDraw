@@ -6,7 +6,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 import Home from './pages/Home';
 import About from './pages/About';
-import Registration from './pages/Registration';
 import LuckyDrawStage from './pages/LuckyDrawStage';
 import Login from './pages/admin/Login';
 import Dashboard from './pages/admin/Dashboard';
@@ -24,7 +23,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
           <Route path="/home" element={<Home />} />
-          <Route path="/registration" element={<Registration />} />
           <Route path="/administrator" element={<Login />} />
           <Route path="/administrator/dashboard" element={
             <ProtectedRoute><Dashboard /></ProtectedRoute>

@@ -6,7 +6,8 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-const { initDatabase } = require('./db');
+const { initDatabase, getDb } = require('./db');
+const { broadcastStatusChange } = require('./events');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -93,9 +94,20 @@ async function startServer() {
     legacyHeaders: false
   });
 
+  // Prevents rapid token harvesting from the OAuth error path.
+  const oauthCallbackLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    message: { error: 'Too many requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
   app.use('/api/config', configRoutes);
   app.post('/api/admin/login', adminLoginLimiter);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/auth/microsoft/login', oauthCallbackLimiter);
+  app.use('/api/auth/microsoft/callback', oauthCallbackLimiter);
   app.use('/api/auth', authRoutes);
   app.use('/api/luckydraw', luckyDrawRoutes);
   app.use('/api/prizes', prizeRoutes);
@@ -121,6 +133,25 @@ async function startServer() {
     console.log(`Lucky Draw backend running on http://localhost:${PORT}`);
   });
 }
+
+// Server-side registration expiry watcher.
+// Checks every second whether the registration end time has passed.
+// When it has, closes registration in the DB and pushes an instant SSE update
+// to all connected clients without waiting for a client poll.
+setInterval(() => {
+  try {
+    const db = getDb();
+    const openRow = db.prepare("SELECT value FROM config WHERE key = 'registration_open'").get();
+    if (!openRow || openRow.value !== '1') return;
+    const endRow = db.prepare("SELECT value FROM config WHERE key = 'registration_end_time'").get();
+    if (!endRow || !endRow.value) return;
+    const end = new Date(endRow.value);
+    if (!isNaN(end.getTime()) && new Date() > end) {
+      db.prepare("INSERT INTO config (key, value) VALUES ('registration_open', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+      broadcastStatusChange({ open: false, endTime: null });
+    }
+  } catch (_) {}
+}, 1000);
 
 startServer().catch(err => {
   console.error('Failed to start server:', err);
