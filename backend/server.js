@@ -103,6 +103,15 @@ async function startServer() {
     legacyHeaders: false
   });
 
+  // Limits concurrent SSE stream connections per IP — each client only needs one.
+  const registrationStatusStreamLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 15,
+    message: { error: 'Too many status stream requests. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
   app.use('/api/config', configRoutes);
   app.post('/api/admin/login', adminLoginLimiter);
   app.use('/api/admin', adminRoutes);
@@ -113,6 +122,7 @@ async function startServer() {
   app.use('/api/prizes', prizeRoutes);
 
   app.post('/api/registration', registrationLimiter);
+  app.get('/api/registration/status/stream', registrationStatusStreamLimiter);
   app.use('/api/registration', registrationRouter);
   app.use('/api/validation', validationRouter);
 

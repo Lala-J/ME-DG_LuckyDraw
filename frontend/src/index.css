@@ -2160,6 +2160,61 @@ h1, h2, h3, h4, h5, h6 {
   font-style: italic;
 }
 
+/* Stage Modification Modal — option rows */
+.exp-options-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.exp-option-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+}
+.theme-light-bg .exp-option-row {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.08);
+}
+.exp-option-left {
+  flex: 1;
+  min-width: 0;
+}
+.exp-option-left h4 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.03em;
+}
+.exp-option-left p {
+  font-size: 0.83rem;
+  opacity: 0.6;
+  line-height: 1.55;
+  margin: 0;
+}
+.exp-option-left p + p {
+  margin-top: 0.5rem;
+}
+.exp-option-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+.exp-fx-warning {
+  font-style: italic;
+  color: rgba(255, 200, 100, 0.85) !important;
+  opacity: 1 !important;
+}
+.theme-light-bg .exp-fx-warning {
+  color: rgba(160, 90, 0, 0.85) !important;
+}
+
 /* ========== Responsive ========== */
 @media (max-width: 600px) {
   .dashboard-grid {

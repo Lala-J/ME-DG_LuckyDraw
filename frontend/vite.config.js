@@ -8,6 +8,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
+        // SSE connections are long-lived — disable timeouts to prevent ECONNRESET
+        timeout: 0,
+        proxyTimeout: 0,
       }
     }
   }

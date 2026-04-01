@@ -218,6 +218,162 @@ function WinnerCardModal({ onClose, getAuthHeaders }) {
   );
 }
 
+// ── Stage Modification modal ──────────────────────────────────────────────────
+function StageModModal({ onClose, getAuthHeaders }) {
+  const [visible, setVisible] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [noGroup, setNoGroup] = useState(false);
+  const [fx, setFx] = useState(false);
+  const windowRef = useRef(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        setEnabled(data.exp_stage_mod_enabled === '1');
+        setNoGroup(data.exp_stage_mod_no_group === '1');
+        setFx(data.exp_stage_mod_fx === '1');
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveConfig = useCallback((newEnabled, newNoGroup, newFx) => {
+    fetch('/api/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({
+        exp_stage_mod_enabled:  newEnabled  ? '1' : '0',
+        exp_stage_mod_no_group: newNoGroup  ? '1' : '0',
+        exp_stage_mod_fx:       newFx       ? '1' : '0',
+      })
+    }).catch(() => {});
+  }, [getAuthHeaders]);
+
+  const handleMasterToggle = () => {
+    const next = !enabled;
+    setEnabled(next);
+    saveConfig(next, noGroup, fx);
+  };
+
+  const handleNoGroupToggle = () => {
+    const next = !noGroup;
+    setNoGroup(next);
+    saveConfig(enabled, next, fx);
+  };
+
+  const handleFxToggle = () => {
+    const next = !fx;
+    setFx(next);
+    saveConfig(enabled, noGroup, next);
+  };
+
+  const close = () => { setVisible(false); setTimeout(onClose, 300); };
+  const handleBackdropClick = (e) => {
+    if (windowRef.current && !windowRef.current.contains(e.target)) close();
+  };
+
+  return (
+    <div
+      className={`fullscreen-modal-backdrop${visible ? ' fullscreen-modal-backdrop--visible' : ''}`}
+      onClick={handleBackdropClick}
+    >
+      <div
+        className={`fullscreen-modal-window${visible ? ' fullscreen-modal-window--visible' : ''}`}
+        ref={windowRef}
+      >
+        {/* Header */}
+        <div className="fullscreen-modal-header">
+          <h3>Stage Modification</h3>
+          <div className="exp-toggle-group">
+            <span className={`exp-toggle-label-text${enabled ? ' exp-toggle-label-text--on' : ''}`}>
+              {enabled ? 'ENABLED' : 'DISABLED'}
+            </span>
+            <label className="exp-toggle-switch" title={enabled ? 'Disable feature' : 'Enable feature'}>
+              <input type="checkbox" checked={enabled} onChange={handleMasterToggle} />
+              <span className="exp-toggle-slider" />
+            </label>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="fullscreen-modal-body">
+          <div style={{ position: 'relative' }}>
+            <div
+              className="exp-options-container"
+              style={{
+                filter:        !enabled ? 'blur(7px)' : 'none',
+                pointerEvents: !enabled ? 'none'      : 'auto',
+                userSelect:    !enabled ? 'none'      : 'auto',
+                transition:    'filter 0.4s ease',
+              }}
+            >
+              {/* Option 1 — Disable Grouped Winners */}
+              <div className="exp-option-row">
+                <div className="exp-option-left">
+                  <h4>Disable Grouped Winners</h4>
+                  <p>
+                    When enabled, the Winners Overview screen (grouped winner cards) will not appear
+                    after the one-by-one reveal. Instead, a 7-second timeout will play after the last
+                    winner of that round before transitioning to the Next Round Standby Screen.
+                  </p>
+                  <p>
+                    This feature is useful if you want a round to only have one winner, which would
+                    make the Winners Overview redundant.
+                  </p>
+                </div>
+                <div className="exp-option-right">
+                  <span className={`exp-toggle-label-text${noGroup ? ' exp-toggle-label-text--on' : ''}`}>
+                    {noGroup ? 'ON' : 'OFF'}
+                  </span>
+                  <label className="exp-toggle-switch" title={noGroup ? 'Turn off' : 'Turn on'}>
+                    <input type="checkbox" checked={noGroup} onChange={handleNoGroupToggle} disabled={!enabled} />
+                    <span className="exp-toggle-slider" />
+                  </label>
+                </div>
+              </div>
+
+              {/* Option 2 — Enable Special Effects */}
+              <div className="exp-option-row">
+                <div className="exp-option-left">
+                  <h4>Enable Special Effects</h4>
+                  <p>
+                    Adds a myriad of visual effects throughout the Roulette Stage: the background
+                    gradient accelerates noticeably during the name-cycling phase; the background
+                    pulses with each winner card transition; an orbiting rainbow gradient traces the
+                    edge of each winner card; the grouped Winners Overview receives a celebratory
+                    particle effect; and the final congratulations screen launches confetti from
+                    both sides of the display.
+                  </p>
+                  <p className="exp-fx-warning">
+                    ⚠ DO NOT USE THIS IN AN ACTUAL STAGING SCENARIO. THIS IS JUST ME MESSING WITH CSS AND KEYFRAMING. I AM SAYING THIS BECAUSE ALL OF THE EFFECTS LOOK REALLY BAD.
+                  </p>
+                </div>
+                <div className="exp-option-right">
+                  <span className={`exp-toggle-label-text${fx ? ' exp-toggle-label-text--on' : ''}`}>
+                    {fx ? 'ON' : 'OFF'}
+                  </span>
+                  <label className="exp-toggle-switch" title={fx ? 'Turn off' : 'Turn on'}>
+                    <input type="checkbox" checked={fx} onChange={handleFxToggle} disabled={!enabled} />
+                    <span className="exp-toggle-slider" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Shimmer overlay when disabled */}
+            {!enabled && <div className="exp-shimmer-overlay" />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 const FRONTEND_FEATURES = [
   { key: 'winner_card', label: 'Winner Card' },
@@ -231,7 +387,7 @@ const BACKEND_FEATURES = [
   { key: 'direct_edit',  label: 'Direct Editing' },
 ];
 
-const STUB_MODALS = new Set(['stage_mod', 'font_family', 'bulk_reg', 'data_pruning', 'direct_edit']);
+const STUB_MODALS = new Set(['font_family', 'bulk_reg', 'data_pruning', 'direct_edit']);
 
 const MODAL_TITLES = {
   stage_mod:    'Stage Modification',
@@ -298,6 +454,11 @@ export default function Experimentals() {
       {/* Winner Card modal */}
       {openModal === 'winner_card' && (
         <WinnerCardModal onClose={() => setOpenModal(null)} getAuthHeaders={getAuthHeaders} />
+      )}
+
+      {/* Stage Modification modal */}
+      {openModal === 'stage_mod' && (
+        <StageModModal onClose={() => setOpenModal(null)} getAuthHeaders={getAuthHeaders} />
       )}
 
       {/* Stub modals */}
