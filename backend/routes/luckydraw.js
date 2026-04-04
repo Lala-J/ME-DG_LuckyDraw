@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
@@ -66,6 +67,9 @@ router.post('/rounds', auth, (req, res) => {
     // Find the next round number (highest + 1)
     const nextNum = existing.length > 0 ? Math.max(...existing.map(r => r.round_number)) + 1 : 1;
     db.prepare("INSERT INTO lucky_draw_rounds (round_number, winner_count, executed, custom_name) VALUES (?, 0, 0, '')").run(nextNum);
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      'round_added', JSON.stringify({ round_number: nextNum, custom_name: '' })
+    );
     res.json({ success: true, roundNumber: nextNum });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -87,6 +91,9 @@ router.delete('/rounds/:roundNumber', auth, (req, res) => {
       db.prepare('DELETE FROM lucky_draw_round_prizes WHERE round_number = ?').run(roundNumber);
       db.prepare('DELETE FROM lucky_draw_rounds WHERE round_number = ?').run(roundNumber);
     })();
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      'round_deleted', JSON.stringify({ round_number: roundNumber, custom_name: round.custom_name || '' })
+    );
 
     res.json({ success: true });
   } catch (err) {
@@ -122,6 +129,13 @@ router.put('/rounds/:roundNumber/prizes', auth, (req, res) => {
       for (const prizeId of prizeIds) insert.run(roundNumber, prizeId);
       db.prepare('UPDATE lucky_draw_rounds SET winner_count = ? WHERE round_number = ?').run(prizeIds.length, roundNumber);
     })();
+    const prizeNames = prizeIds.map(id => {
+      const p = db.prepare('SELECT name FROM prizes WHERE prize_id = ?').get(id);
+      return p ? p.name : id;
+    });
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      'prize_configuration', JSON.stringify({ round_number: roundNumber, custom_name: round.custom_name || '', prize_names: prizeNames })
+    );
 
     res.json({ success: true });
   } catch (err) {
@@ -168,20 +182,25 @@ router.post('/run/:roundNumber', auth, (req, res) => {
     const eligible = db.prepare("SELECT * FROM registration_table WHERE prize_winner_mark = ''").all();
     if (eligible.length === 0) return res.status(400).json({ error: 'No eligible participants available' });
 
+    const priorRun = db.prepare(
+      "SELECT id FROM audit_draw_changes WHERE action_type IN ('roulette_ran', 'roulette_redrawn') AND details LIKE ?"
+    ).get(`%"round_number":${roundNumber},%`);
+    const drawActionType = priorRun ? 'roulette_redrawn' : 'roulette_ran';
+
     const actualCount = Math.min(roundPrizes.length, eligible.length);
 
-    // Fisher-Yates shuffle participants
+    // Fisher-Yates shuffle participants (crypto.randomInt for fairness)
     const shuffledParticipants = [...eligible];
     for (let i = shuffledParticipants.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = crypto.randomInt(i + 1);
       [shuffledParticipants[i], shuffledParticipants[j]] = [shuffledParticipants[j], shuffledParticipants[i]];
     }
     const selectedWinners = shuffledParticipants.slice(0, actualCount);
 
-    // Fisher-Yates shuffle prizes (random prize-to-winner assignment)
+    // Fisher-Yates shuffle prizes (crypto.randomInt for fairness)
     const shuffledPrizes = [...roundPrizes];
     for (let i = shuffledPrizes.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = crypto.randomInt(i + 1);
       [shuffledPrizes[i], shuffledPrizes[j]] = [shuffledPrizes[j], shuffledPrizes[i]];
     }
 
@@ -209,6 +228,15 @@ router.post('/run/:roundNumber', auth, (req, res) => {
       prizePicture: shuffledPrizes[i].picture_filename ? `/api/prizes/${shuffledPrizes[i].prize_id}/picture` : null
     }));
 
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      drawActionType,
+      JSON.stringify({
+        round_number: roundNumber,
+        custom_name: round.custom_name || '',
+        winners: resultWinners.map(w => ({ full_name: w.fullName, staff_id: w.staffId, prize_name: w.prizeName }))
+      })
+    );
+
     res.json({ success: true, winners: resultWinners });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -226,6 +254,7 @@ router.post('/reset', auth, (req, res) => {
       db.prepare("UPDATE registration_table SET prize_winner_mark = ''").run();
       db.prepare("INSERT INTO config (key, value) VALUES ('lucky_draw_rounds', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
     })();
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run('lucky_draw_reset', '{}');
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });

@@ -6,6 +6,15 @@ const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
+const { sanitizeAuditInput } = require('../utils/sanitize');
+
+// Keys tracked in the home-screen audit log and their display labels
+const AUDIT_FIELD_LABELS = {
+  heading_text:  'Heading Text',
+  subtitle_text: 'Subtitle Text',
+  logo_size:     'Logo Display Size',
+  organisation:  'Organisation',
+};
 
 // Multer config for logo uploads
 const storage = multer.diskStorage({
@@ -38,14 +47,27 @@ const upload = multer({
   }
 });
 
-// GET /api/config - public
+// Backend-only config keys that must never be exposed to unauthenticated users.
+const PRIVATE_CONFIG_KEYS = new Set([
+  'exp_bulk_reg_enabled',
+  'exp_selective_reg_enabled',
+  'exp_ignore_special_chars',
+  'exp_ignore_country_codes',
+  'exp_ignore_brackets',
+  'exp_validation_editing',
+  'exp_additional_entries',
+]);
+
+// GET /api/config - public (backend experimental flags excluded)
 router.get('/', (req, res) => {
   try {
     const db = getDb();
     const rows = db.prepare('SELECT key, value FROM config').all();
     const config = {};
     for (const row of rows) {
-      config[row.key] = row.value;
+      if (!PRIVATE_CONFIG_KEYS.has(row.key)) {
+        config[row.key] = row.value;
+      }
     }
     res.json(config);
   } catch (err) {
@@ -74,9 +96,43 @@ router.put('/secure', auth, (req, res) => {
       return res.status(400).json({ error: 'No settings provided.' });
     }
 
+    // Backend Experimental Feature keys that have dedicated audit action types
+    const BACKEND_EXP_AUDIT_MAP = {
+      exp_bulk_reg_enabled:      'reg_bulk_changed',
+      exp_selective_reg_enabled: 'reg_selective_changed',
+      exp_ignore_special_chars:  'data_ignore_special_chars_changed',
+      exp_ignore_country_codes:  'data_ignore_country_codes_changed',
+      exp_ignore_brackets:       'data_ignore_brackets_changed',
+      exp_validation_editing:    'direct_validation_editing_changed',
+      exp_additional_entries:    'direct_additional_entries_changed',
+    };
+
+    // Only allow backend experimental feature keys through this endpoint
+    const forbidden = Object.keys(updates).filter(k => !(k in BACKEND_EXP_AUDIT_MAP));
+    if (forbidden.length > 0) {
+      return res.status(403).json({ error: `Keys not allowed via secure endpoint: ${forbidden.join(', ')}` });
+    }
+
+    // Read old values for any auditable keys present in the update
+    const backendExpOld = {};
+    for (const k of Object.keys(BACKEND_EXP_AUDIT_MAP)) {
+      if (k in updates) {
+        const row = db.prepare('SELECT value FROM config WHERE key = ?').get(k);
+        backendExpOld[k] = row ? row.value : '';
+      }
+    }
+
     const upsert = db.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const [key, value] of Object.entries(updates)) {
       upsert.run(key, String(value));
+    }
+
+    // Log backend experimental feature changes
+    const expAudit = db.prepare('INSERT INTO audit_exp_changes (action_type, details) VALUES (?, ?)');
+    for (const [key, actionType] of Object.entries(BACKEND_EXP_AUDIT_MAP)) {
+      if (key in updates && String(updates[key]) !== backendExpOld[key]) {
+        expAudit.run(actionType, JSON.stringify({ enabled: String(updates[key]) === '1' }));
+      }
     }
 
     res.json({ success: true });
@@ -86,8 +142,10 @@ router.put('/secure', auth, (req, res) => {
 });
 
 // Keys that may be written without password re-verification.
-// Experimental feature flags and other sensitive keys are intentionally
-// excluded — they must go through PUT /api/config/secure.
+// Backend Experimental Feature flags are intentionally excluded — they must go
+// through PUT /api/config/secure.  Frontend Experimental Feature keys (Winner
+// Card, Stage Modification, Font Family) are included here because they are
+// toggled/adjusted inline in the UI without a separate password step.
 const UNPROTECTED_CONFIG_KEYS = new Set([
   'heading_text',
   'subtitle_text',
@@ -98,6 +156,22 @@ const UNPROTECTED_CONFIG_KEYS = new Set([
   'bg_color3',
   'bg_animation_speed',
   'copyright_visible',
+  // Winner Card
+  'exp_winner_card_enabled',
+  'exp_winner_card_field1',
+  'exp_winner_card_field2',
+  'exp_winner_card_field3',
+  'exp_winner_card_field4',
+  // Stage Modification
+  'exp_stage_mod_enabled',
+  'exp_stage_mod_no_group',
+  'exp_transition_card_delay',
+  'exp_transition_round_timeout',
+  'exp_transition_suspense_delay',
+  // Font Family
+  'exp_font_enabled',
+  'exp_font_header_id',
+  'exp_font_body_id',
 ]);
 
 // PUT /api/config - auth required
@@ -114,9 +188,159 @@ router.put('/', auth, (req, res) => {
       return res.status(403).json({ error: `These keys require password verification: ${forbidden.join(', ')}` });
     }
 
+    // Read old values for home-screen audit-tracked keys before overwriting
+    const trackedKeys = Object.keys(updates).filter(k => AUDIT_FIELD_LABELS[k]);
+    const oldValues = {};
+    for (const key of trackedKeys) {
+      const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key);
+      oldValues[key] = row ? (row.value || '') : '';
+    }
+
+    // Read old values for website audit-tracked keys before overwriting
+    const WEBSITE_KEYS = ['bg_color1', 'bg_color2', 'bg_color3', 'bg_animation_speed', 'copyright_visible'];
+    const websiteOld = {};
+    for (const key of WEBSITE_KEYS) {
+      if (key in updates) {
+        const row = db.prepare('SELECT value FROM config WHERE key = ?').get(key);
+        websiteOld[key] = row ? (row.value || '') : '';
+      }
+    }
+
     const upsert = db.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const [key, value] of Object.entries(updates)) {
       upsert.run(key, String(value));
+    }
+
+    // Log home-screen field changes
+    const auditInsert = db.prepare('INSERT INTO audit_home_changes (field, old_value, new_value) VALUES (?, ?, ?)');
+    for (const key of trackedKeys) {
+      const newVal = String(updates[key]);
+      const oldVal = oldValues[key];
+      if (oldVal !== newVal) {
+        auditInsert.run(AUDIT_FIELD_LABELS[key], sanitizeAuditInput(oldVal), sanitizeAuditInput(newVal));
+      }
+    }
+
+    // Log website field changes
+    const websiteAudit = db.prepare('INSERT INTO audit_website_changes (field, old_value, new_value) VALUES (?, ?, ?)');
+
+    // Gradient colours — logged as one row if any of the three colors changed
+    const colorKeys = ['bg_color1', 'bg_color2', 'bg_color3'];
+    if (colorKeys.some(k => k in updates)) {
+      // Ensure old values are available for all three colors even if some were not in the update
+      for (const k of colorKeys) {
+        if (!(k in websiteOld)) {
+          const row = db.prepare('SELECT value FROM config WHERE key = ?').get(k);
+          websiteOld[k] = row ? (row.value || '') : '';
+        }
+      }
+      const oldStr = colorKeys.map(k => websiteOld[k]).join(', ');
+      const newStr = colorKeys.map(k => k in updates ? String(updates[k]) : websiteOld[k]).join(', ');
+      if (oldStr !== newStr) {
+        websiteAudit.run('Gradient Colour', sanitizeAuditInput(oldStr), sanitizeAuditInput(newStr));
+      }
+    }
+
+    // Gradient speed
+    if ('bg_animation_speed' in updates) {
+      const oldSpd = websiteOld['bg_animation_speed'];
+      const newSpd = String(updates['bg_animation_speed']);
+      if (oldSpd !== newSpd) {
+        websiteAudit.run('Gradient Speed', sanitizeAuditInput(oldSpd), sanitizeAuditInput(newSpd));
+      }
+    }
+
+    // Copyright visibility
+    if ('copyright_visible' in updates) {
+      const oldVis = websiteOld['copyright_visible'];
+      const newVis = String(updates['copyright_visible']);
+      if (oldVis !== newVis) {
+        const oldLabel = oldVis === '1' ? 'On' : 'Off';
+        const newLabel = newVis === '1' ? 'On' : 'Off';
+        websiteAudit.run('Copyright Visibility', oldLabel, newLabel);
+      }
+    }
+
+    // ── Frontend Experimental Feature audit logging ───────────────────────────
+
+    const EXP_WINNER_KEYS      = ['exp_winner_card_enabled', 'exp_winner_card_field1', 'exp_winner_card_field2', 'exp_winner_card_field3', 'exp_winner_card_field4'];
+    const EXP_STAGE_MOD_KEYS   = ['exp_stage_mod_enabled', 'exp_stage_mod_no_group'];
+    const EXP_TRANSITION_KEYS  = ['exp_transition_card_delay', 'exp_transition_round_timeout', 'exp_transition_suspense_delay'];
+    const EXP_FONT_KEYS        = ['exp_font_enabled', 'exp_font_header_id', 'exp_font_body_id'];
+    const hasExpKey = [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS].some(k => k in updates);
+
+    if (hasExpKey) {
+      // Read old stored values for all exp keys in this update
+      const expOld = {};
+      for (const k of [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS]) {
+        const row = db.prepare('SELECT value FROM config WHERE key = ?').get(k);
+        expOld[k] = row ? row.value : '';
+      }
+
+      const expAudit = db.prepare('INSERT INTO audit_exp_changes (action_type, details) VALUES (?, ?)');
+
+      // Winner Card — log if any winner card key actually changed
+      if (EXP_WINNER_KEYS.some(k => k in updates && String(updates[k]) !== expOld[k])) {
+        expAudit.run('winner_card_changed', JSON.stringify({
+          enabled: String(updates['exp_winner_card_enabled'] ?? expOld['exp_winner_card_enabled']) === '1',
+          fields: [
+            updates['exp_winner_card_field1'] ?? expOld['exp_winner_card_field1'],
+            updates['exp_winner_card_field2'] ?? expOld['exp_winner_card_field2'],
+            updates['exp_winner_card_field3'] ?? expOld['exp_winner_card_field3'],
+            updates['exp_winner_card_field4'] ?? expOld['exp_winner_card_field4'],
+          ],
+        }));
+      }
+
+      // Stage Mod — Disable Grouped Winners: log if master toggle or no_group changed
+      if (EXP_STAGE_MOD_KEYS.some(k => k in updates && String(updates[k]) !== expOld[k])) {
+        expAudit.run('stage_mod_no_group_changed', JSON.stringify({
+          enabled:  String(updates['exp_stage_mod_enabled']  ?? expOld['exp_stage_mod_enabled'])  === '1',
+          no_group: String(updates['exp_stage_mod_no_group'] ?? expOld['exp_stage_mod_no_group']) === '1',
+        }));
+      }
+
+      // Stage Mod — Transition Adjustments: log only the fields that actually changed
+      const changedTransitions = {};
+      if ('exp_transition_card_delay'     in updates && String(updates['exp_transition_card_delay'])     !== expOld['exp_transition_card_delay'])     changedTransitions.card_delay    = String(updates['exp_transition_card_delay']);
+      if ('exp_transition_round_timeout'  in updates && String(updates['exp_transition_round_timeout'])  !== expOld['exp_transition_round_timeout'])  changedTransitions.round_timeout = String(updates['exp_transition_round_timeout']);
+      if ('exp_transition_suspense_delay' in updates && String(updates['exp_transition_suspense_delay']) !== expOld['exp_transition_suspense_delay']) changedTransitions.suspense_delay = String(updates['exp_transition_suspense_delay']);
+      if (Object.keys(changedTransitions).length > 0) {
+        expAudit.run('stage_mod_transitions_changed', JSON.stringify({
+          enabled: String(updates['exp_stage_mod_enabled'] ?? expOld['exp_stage_mod_enabled']) === '1',
+          changed: changedTransitions,
+        }));
+      }
+
+      // Font Family — Header: log if master toggle or header font changed
+      if (('exp_font_enabled'    in updates && String(updates['exp_font_enabled'])    !== expOld['exp_font_enabled'])
+       || ('exp_font_header_id'  in updates && String(updates['exp_font_header_id'])  !== expOld['exp_font_header_id'])) {
+        const newHeaderId = updates['exp_font_header_id'] ?? expOld['exp_font_header_id'];
+        let headerName = 'Orbitron (Default)';
+        if (newHeaderId && newHeaderId !== 'default') {
+          const font = db.prepare('SELECT display_name FROM fonts WHERE id = ?').get(newHeaderId);
+          if (font) headerName = font.display_name;
+        }
+        expAudit.run('font_header_changed', JSON.stringify({
+          enabled:   String(updates['exp_font_enabled'] ?? expOld['exp_font_enabled']) === '1',
+          font_name: headerName,
+        }));
+      }
+
+      // Font Family — Body: log if master toggle or body font changed
+      if (('exp_font_enabled'  in updates && String(updates['exp_font_enabled'])  !== expOld['exp_font_enabled'])
+       || ('exp_font_body_id'  in updates && String(updates['exp_font_body_id'])  !== expOld['exp_font_body_id'])) {
+        const newBodyId = updates['exp_font_body_id'] ?? expOld['exp_font_body_id'];
+        let bodyName = 'Rajdhani (Default)';
+        if (newBodyId && newBodyId !== 'default') {
+          const font = db.prepare('SELECT display_name FROM fonts WHERE id = ?').get(newBodyId);
+          if (font) bodyName = font.display_name;
+        }
+        expAudit.run('font_body_changed', JSON.stringify({
+          enabled:   String(updates['exp_font_enabled'] ?? expOld['exp_font_enabled']) === '1',
+          font_name: bodyName,
+        }));
+      }
     }
 
     res.json({ success: true });
@@ -150,6 +374,14 @@ router.post('/logo', auth, (req, res) => {
       // Save new logo filename in config
       db.prepare("INSERT INTO config (key, value) VALUES ('logo_filename', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(req.file.filename);
 
+      // Audit log
+      const oldFilename = (oldLogo && oldLogo.value) ? oldLogo.value : 'None';
+      db.prepare('INSERT INTO audit_home_changes (field, old_value, new_value) VALUES (?, ?, ?)').run(
+        'Logo',
+        sanitizeAuditInput(oldFilename),
+        sanitizeAuditInput(req.file.originalname)
+      );
+
       res.json({ success: true, filename: req.file.filename });
     } catch (err2) {
       res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err2.message : 'Internal server error' });
@@ -166,7 +398,11 @@ router.get('/logo', (req, res) => {
       return res.status(404).json({ error: 'No logo uploaded' });
     }
 
-    const logoPath = path.join(__dirname, '..', 'uploads', row.value);
+    const uploadsDir = path.resolve(__dirname, '..', 'uploads');
+    const logoPath = path.resolve(uploadsDir, path.basename(row.value));
+    if (!logoPath.startsWith(uploadsDir)) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
     if (!fs.existsSync(logoPath)) {
       return res.status(404).json({ error: 'Logo file not found' });
     }

@@ -186,6 +186,69 @@ async function initDatabase() {
       filename TEXT NOT NULL,
       format TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS audit_manual_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      full_name TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      ip_address TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_azure_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      full_name TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      email_address TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_admin_logins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      ip_address TEXT NOT NULL DEFAULT '',
+      token_expires_at TEXT,
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_home_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field TEXT NOT NULL,
+      old_value TEXT NOT NULL DEFAULT '',
+      new_value TEXT NOT NULL DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_reg_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_draw_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_website_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field TEXT NOT NULL,
+      old_value TEXT NOT NULL DEFAULT '',
+      new_value TEXT NOT NULL DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_exp_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Seed default admin if none exists
@@ -212,6 +275,20 @@ async function initDatabase() {
     copyright_visible: '1',
     lucky_draw_rounds: '0',
     organisation: '',
+    // Frontend Experimental Features
+    exp_winner_card_enabled:        '0',
+    exp_winner_card_field1:         'full_name',
+    exp_winner_card_field2:         'staff_id',
+    exp_winner_card_field3:         'disabled',
+    exp_winner_card_field4:         'disabled',
+    exp_stage_mod_enabled:          '0',
+    exp_stage_mod_no_group:         '0',
+    exp_transition_card_delay:      '2.5',
+    exp_transition_round_timeout:   '7.0',
+    exp_transition_suspense_delay:  '3.0',
+    exp_font_enabled:               '0',
+    exp_font_header_id:             'default',
+    exp_font_body_id:               'default',
     // Backend Experimental Features
     exp_bulk_reg_enabled:       '0',
     exp_selective_reg_enabled:  '0',
@@ -272,6 +349,72 @@ async function initDatabase() {
   if (!resultCols.find(c => c.name === 'prize_id')) {
     db.exec("ALTER TABLE lucky_draw_results ADD COLUMN prize_id TEXT DEFAULT ''");
   }
+
+  // Migrations: create audit tables if they were absent in an older database
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_manual_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      full_name TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      ip_address TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_azure_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      full_name TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now')),
+      email_address TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_admin_logins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL,
+      ip_address TEXT NOT NULL DEFAULT '',
+      token_expires_at TEXT,
+      attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_home_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field TEXT NOT NULL,
+      old_value TEXT NOT NULL DEFAULT '',
+      new_value TEXT NOT NULL DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_reg_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_draw_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_website_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field TEXT NOT NULL,
+      old_value TEXT NOT NULL DEFAULT '',
+      new_value TEXT NOT NULL DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_exp_changes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '{}',
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 
   return db;
 }

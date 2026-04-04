@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfig } from '../../contexts/ConfigContext';
@@ -17,6 +17,7 @@ export default function HomeScreenConfig() {
   const [logoSize, setLogoSize] = useState(120);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+  const logoInputRef = useRef(null);
 
   useEffect(() => {
     setHeadingText(config.heading_text || '');
@@ -115,11 +116,20 @@ export default function HomeScreenConfig() {
                 </div>
               )}
               <input
+                ref={logoInputRef}
                 type="file"
-                className="form-input form-file"
                 accept="image/*"
                 onChange={handleLogoChange}
+                style={{ display: 'none' }}
               />
+              <button
+                type="button"
+                className="form-input form-file btn"
+                style={{ textAlign: 'left', cursor: 'pointer' }}
+                onClick={() => logoInputRef.current?.click()}
+              >
+                {logoFile ? logoFile.name : 'Choose File…'}
+              </button>
             </div>
 
             <div className="form-group">

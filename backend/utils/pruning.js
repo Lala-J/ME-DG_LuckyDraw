@@ -60,11 +60,19 @@ function pruneSpecialChars(name) {
 
 // ---------------------------------------------------------------------------
 // pruneBrackets
-// Removes content inside round brackets (and the brackets themselves).
+// Removes content inside brackets of any kind (and the brackets themselves).
+// Handles round (), square [], curly {}, and angle <> brackets.
 // e.g. "Tethys Melyon (DoSA)" → "Tethys Melyon"
+// e.g. "Jane Doe [HR]"        → "Jane Doe"
 // ---------------------------------------------------------------------------
 function pruneBrackets(name) {
-  return name.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  return name
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\{[^}]*\}/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // ---------------------------------------------------------------------------

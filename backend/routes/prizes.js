@@ -66,6 +66,9 @@ router.post('/', auth, (req, res) => {
     const prizeId = nextPrizeId(db);
     db.prepare('INSERT INTO prizes (prize_id, name, picture_filename) VALUES (?, ?, ?)').run(prizeId, name || '', '');
     const prize = db.prepare('SELECT * FROM prizes WHERE prize_id = ?').get(prizeId);
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      'prize_added', JSON.stringify({ prize_name: name || '' })
+    );
     res.json({ ...prize, assignedRound: null, picturePath: null });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -77,8 +80,15 @@ router.put('/:prizeId', auth, (req, res) => {
   try {
     const db = getDb();
     const { name } = req.body;
+    const existing = db.prepare('SELECT name FROM prizes WHERE prize_id = ?').get(req.params.prizeId);
+    const oldName = existing ? existing.name : '';
     const result = db.prepare('UPDATE prizes SET name = ? WHERE prize_id = ?').run(name || '', req.params.prizeId);
     if (result.changes === 0) return res.status(404).json({ error: 'Prize not found' });
+    if (oldName !== (name || '')) {
+      db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+        'prize_name_changed', JSON.stringify({ old_name: oldName, new_name: name || '' })
+      );
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -99,11 +109,14 @@ router.delete('/:prizeId', auth, (req, res) => {
     if (usedInResult) return res.status(400).json({ error: 'Prize has already been awarded. Reset the round first.' });
 
     if (prize.picture_filename) {
-      const picPath = path.join(prizePicsDir(), prize.picture_filename);
-      if (fs.existsSync(picPath)) fs.unlinkSync(picPath);
+      const picPath = path.resolve(prizePicsDir(), path.basename(prize.picture_filename));
+      if (picPath.startsWith(path.resolve(prizePicsDir())) && fs.existsSync(picPath)) fs.unlinkSync(picPath);
     }
 
     db.prepare('DELETE FROM prizes WHERE prize_id = ?').run(req.params.prizeId);
+    db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+      'prize_deleted', JSON.stringify({ prize_name: prize.name })
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -121,6 +134,9 @@ router.delete('/:prizeId/picture', auth, (req, res) => {
       const picPath = path.join(prizePicsDir(), prize.picture_filename);
       if (fs.existsSync(picPath)) fs.unlinkSync(picPath);
       db.prepare('UPDATE prizes SET picture_filename = ? WHERE prize_id = ?').run('', req.params.prizeId);
+      db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+        'prize_image_deleted', JSON.stringify({ prize_name: prize.name })
+      );
     }
 
     res.json({ success: true });
@@ -146,6 +162,9 @@ router.post('/:prizeId/picture', auth, (req, res) => {
       }
 
       db.prepare('UPDATE prizes SET picture_filename = ? WHERE prize_id = ?').run(req.file.filename, req.params.prizeId);
+      db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
+        'prize_image_replaced', JSON.stringify({ prize_name: prize.name })
+      );
       res.json({ success: true, filename: req.file.filename, picturePath: `/api/prizes/${req.params.prizeId}/picture` });
     } catch (err2) {
       res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err2.message : 'Internal server error' });
@@ -160,7 +179,9 @@ router.get('/:prizeId/picture', auth, (req, res) => {
     const prize = db.prepare('SELECT * FROM prizes WHERE prize_id = ?').get(req.params.prizeId);
     if (!prize || !prize.picture_filename) return res.status(404).json({ error: 'No picture' });
 
-    const picPath = path.join(prizePicsDir(), prize.picture_filename);
+    const picsDir = path.resolve(prizePicsDir());
+    const picPath = path.resolve(picsDir, path.basename(prize.picture_filename));
+    if (!picPath.startsWith(picsDir)) return res.status(400).json({ error: 'Invalid filename' });
     if (!fs.existsSync(picPath)) return res.status(404).json({ error: 'File not found' });
 
     res.sendFile(picPath);

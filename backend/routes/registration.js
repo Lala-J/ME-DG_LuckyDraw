@@ -9,6 +9,7 @@ const { getDb } = require('../db');
 const auth = require('../middleware/auth');
 const { emitter, broadcastStatusChange } = require('../events');
 const { pruneSpecialChars, pruneBrackets, pruneCountryCode } = require('../utils/pruning');
+const { sanitizeAuditInput } = require('../utils/sanitize');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -75,6 +76,10 @@ registrationRouter.get('/status', (req, res) => {
       const end = new Date(endTime);
       if (!isNaN(end.getTime()) && new Date() > end) {
         db.prepare("INSERT INTO config (key, value) VALUES ('registration_open', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+        db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+          'registration_closed',
+          JSON.stringify({ method: 'auto' })
+        );
         isOpen = false;
       }
     }
@@ -139,6 +144,11 @@ registrationRouter.post('/open', auth, (req, res) => {
     upsert.run('registration_open', '1');
     upsert.run('registration_end_time', endTime);
 
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+      'registration_opened',
+      JSON.stringify({ duration_seconds: durationSeconds, end_time: endTime })
+    );
+
     broadcastStatusChange({ open: true, endTime });
     res.json({ success: true, endTime });
   } catch (err) {
@@ -151,6 +161,10 @@ registrationRouter.post('/close', auth, (req, res) => {
   try {
     const db = getDb();
     db.prepare("INSERT INTO config (key, value) VALUES ('registration_open', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+      'registration_closed',
+      JSON.stringify({ method: 'manual' })
+    );
     broadcastStatusChange({ open: false, endTime: null });
     res.json({ success: true });
   } catch (err) {
@@ -161,6 +175,8 @@ registrationRouter.post('/close', auth, (req, res) => {
 // POST /api/registration - register a user (manual entry: fullName + phoneNumber)
 registrationRouter.post('/', async (req, res) => {
   try {
+    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'Unknown';
+
     const result = await serializeWrite(() => {
       const db = getDb();
       const { fullName, phoneNumber } = req.body;
@@ -216,11 +232,23 @@ registrationRouter.post('/', async (req, res) => {
       }
 
       if (!validationRow) {
+        db.prepare('INSERT INTO audit_manual_registrations (status, full_name, phone_number, ip_address) VALUES (?, ?, ?, ?)').run(
+          'rejected',
+          sanitizeAuditInput(trimmedName),
+          sanitizeAuditInput(phoneNumber),
+          sanitizeAuditInput(clientIp)
+        );
         return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
 
       const similarity = charSimilarity(checkName, validationRow.full_name);
       if (similarity < 0.85) {
+        db.prepare('INSERT INTO audit_manual_registrations (status, full_name, phone_number, ip_address) VALUES (?, ?, ?, ?)').run(
+          'rejected',
+          sanitizeAuditInput(trimmedName),
+          sanitizeAuditInput(phoneNumber),
+          sanitizeAuditInput(clientIp)
+        );
         return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
 
@@ -236,6 +264,12 @@ registrationRouter.post('/', async (req, res) => {
         validationRow.title || '',
         validationRow.department || '',
         validationRow.location || ''
+      );
+      db.prepare('INSERT INTO audit_manual_registrations (status, full_name, phone_number, ip_address) VALUES (?, ?, ?, ?)').run(
+        'validated',
+        validationRow.full_name,
+        validationRow.phone_number,
+        sanitizeAuditInput(clientIp)
       );
       return { status: 200, body: { success: true, message: 'Registration successful!' } };
     });
@@ -298,6 +332,7 @@ registrationRouter.get('/download', auth, (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run('registration_downloaded', '{}');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="registrations.xlsx"');
     res.send(buf);
@@ -328,6 +363,7 @@ registrationRouter.post('/clear', auth, (req, res) => {
       db.prepare("DELETE FROM sqlite_sequence WHERE name = 'registration_table'").run();
     });
     clearTable();
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run('registration_deleted', '{}');
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -353,6 +389,14 @@ registrationRouter.post('/add-entry', auth, (req, res) => {
     if (result.changes === 0) {
       return res.status(400).json({ error: 'Staff ID is already registered' });
     }
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+      'validation_entry_selected',
+      JSON.stringify({
+        full_name:    full_name.trim(),
+        staff_id:     staff_id.trim(),
+        phone_number: (phone_number || '').trim(),
+      })
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -411,6 +455,7 @@ validationRouter.get('/download', auth, (req, res) => {
     XLSX.utils.book_append_sheet(wb, ws, 'Validation');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run('validation_downloaded', '{}');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="validation.xlsx"');
     res.send(buf);
@@ -501,6 +546,10 @@ validationRouter.post('/upload', auth, (req, res) => {
       });
 
       const count = insertMany(jsonData);
+      db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+        'validation_uploaded',
+        JSON.stringify({ entry_count: count })
+      );
       res.json({ success: true, count });
     } catch (err2) {
       res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err2.message : 'Internal server error' });
@@ -527,6 +576,7 @@ validationRouter.post('/clear', auth, (req, res) => {
       db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
     });
     clearTable();
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run('validation_deleted', '{}');
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -557,6 +607,10 @@ validationRouter.post('/to-registration', auth, (req, res) => {
     });
 
     const inserted = copyAll(rows);
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+      'bulk_registration',
+      JSON.stringify({ inserted, total: rows.length })
+    );
     res.json({ success: true, inserted, total: rows.length });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -606,15 +660,29 @@ validationRouter.post('/entry', auth, (req, res) => {
       return res.status(400).json({ error: 'Full Name and Phone Number are required.' });
     }
 
+    const trimmedEntry = {
+      full_name:    full_name.trim(),
+      staff_id:     (staff_id || '').trim(),
+      phone_number: phone_number.trim(),
+      title:        (title || '').trim(),
+      department:   (department || '').trim(),
+      location:     (location || '').trim(),
+    };
+
     db.prepare(
       'INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(
-      full_name.trim(),
-      (staff_id || '').trim(),
-      phone_number.trim(),
-      (title || '').trim(),
-      (department || '').trim(),
-      (location || '').trim()
+      trimmedEntry.full_name,
+      trimmedEntry.staff_id,
+      trimmedEntry.phone_number,
+      trimmedEntry.title,
+      trimmedEntry.department,
+      trimmedEntry.location
+    );
+
+    db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(
+      'validation_entry_added',
+      JSON.stringify(trimmedEntry)
     );
 
     res.json({ success: true });

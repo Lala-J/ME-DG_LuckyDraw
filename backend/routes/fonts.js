@@ -102,6 +102,9 @@ router.delete('/:id', auth, (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     db.prepare('DELETE FROM fonts WHERE id = ?').run(req.params.id);
+    db.prepare('INSERT INTO audit_exp_changes (action_type, details) VALUES (?, ?)').run(
+      'font_deleted', JSON.stringify({ font_name: font.display_name })
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });

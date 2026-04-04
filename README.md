@@ -22,6 +22,9 @@
   - [Azure App Registration](#azure-app-registration)
   - [Field Mapping](#field-mapping)
 - [Managing the Application](#managing-the-application)
+- [Experimental Features](#experimental-features)
+- [Audit Logs](#audit-logs)
+- [Security Summary](#security-summary)
 - [Data Persistence](#data-persistence)
 
 ---
@@ -188,6 +191,79 @@ By default, the backend maps:
 | `mobilePhone` | Phone Number |
 
 To use different Graph fields, edit `backend/routes/auth.js` at the two lines marked `FIELD MAPPING` (around line 206) and update the `$select` query on the line above them accordingly. The required Graph API scope may also need to be updated depending on which fields you add.
+
+---
+
+## Experimental Features
+
+The admin panel includes an **Experimental Features** page with toggles for frontend and backend behaviours. These are split into two groups:
+
+**Frontend Features** (saved without password re-verification):
+
+| Feature | Description |
+|---|---|
+| Winner Card | Configures which data fields appear on the lucky draw winner card overlay. |
+| Stage Modification | Controls transition timing between rounds and whether winners are displayed grouped or individually. |
+| Font Family | Allows uploading custom font files (TTF, OTF, WOFF, WOFF2) and selecting them for header and body text. |
+
+**Backend Features** (each change requires admin password re-verification):
+
+| Feature | Description |
+|---|---|
+| Enable Bulk Registration | Shows a button to copy all validation entries to the registration table at once. |
+| Enable Selective Registration | Shows an "Add" button in the validation table modal for individual entry selection. |
+| Ignore Special Characters | Strips non-Latin characters from names during validation comparison. |
+| Ignore Country Codes | Strips leading country codes from phone numbers during validation comparison. |
+| Ignore Bracketed Characters | Strips content inside brackets (round, square, curly, angle) from names during validation comparison. |
+| Validation Editing | Allows inline editing of validation table entries from the admin panel. |
+| Additional Entries | Allows adding new entries to the validation table directly from the admin panel. |
+
+Backend experimental feature flags are never exposed to unauthenticated users — they are excluded from the public `GET /api/config` response and can only be modified through the password-verified `PUT /api/config/secure` endpoint.
+
+---
+
+## Audit Logs
+
+The **Audit Logs** page (under the admin panel) provides a read-only view of all recorded events. All audit log endpoints require admin authentication.
+
+**System Status** section displays:
+- Website Initialisation timestamp
+- Website Uptime (live counter)
+- Azure Connectivity status and connected organisation name
+
+**End-User Action Logs:**
+- Manual Registrations (status, name, phone, timestamp, IP)
+- Azure Registrations (status, name, phone, timestamp, email)
+- Admin Logins (status, IP, timestamp, token expiry countdown)
+
+**Admin Action Logs:**
+- Home Screen Master Changes (field, old/new values)
+- Registration Master Changes (action type with drill-down details)
+- Lucky Draw Master Changes (action type with drill-down details including winner lists)
+- Website Master Changes (field, old/new values)
+- Experimental Features Changes (action type with drill-down details)
+
+Audit records are preserved across data wipes — the wipe operation itself is recorded.
+
+---
+
+## Security Summary
+
+| Layer | Mechanism |
+|---|---|
+| Authentication | JWT in `HttpOnly; Secure; SameSite=Strict` cookie, `__Host-` prefix in production |
+| Token types | `type` claim prevents Azure result tokens from being used as admin sessions |
+| OAuth CSRF | Cryptographic `state` parameter with 10-minute TTL |
+| Result tokens | Single-use JTI enforcement, 60-second expiry |
+| Password storage | bcrypt with cost factor 10, minimum 12 characters enforced |
+| Rate limiting | Admin login (10/15 min), registration (1000/min), OAuth callback (20/min), SSE streams (15/min) |
+| Input sanitisation | HTML-encoding of special characters in audit logs, length capping at 300 characters |
+| Data pruning | Comparison-only — stored data is never modified by pruning functions |
+| Lucky draw fairness | Cryptographically secure randomness (`crypto.randomInt`) for Fisher-Yates shuffle |
+| File uploads | Extension allowlists, MIME validation, size limits, path traversal protection on serving |
+| Config access control | Backend experimental flags excluded from public API, require password re-verification to modify |
+| Headers | Helmet (CSP, HSTS, X-Frame-Options, etc.), CORS with explicit origin allowlist |
+| Security policy | Startup enforcement of HTTPS on origins and redirect URIs in production |
 
 ---
 

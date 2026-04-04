@@ -11,6 +11,8 @@ router.post('/login', (req, res) => {
   try {
     const db = getDb();
     const { password } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || 'Unknown';
+
     if (!password) {
       return res.status(400).json({ error: 'Password is required' });
     }
@@ -22,13 +24,19 @@ router.post('/login', (req, res) => {
 
     const valid = bcrypt.compareSync(password, admin.password_hash);
     if (!valid) {
+      db.prepare('INSERT INTO audit_admin_logins (status, ip_address) VALUES (?, ?)').run('failed', clientIp);
       return res.status(401).json({ error: 'Invalid password' });
     }
 
+    const tokenExpiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
     const token = jwt.sign(
       { type: 'admin', id: admin.id, username: admin.username },
       JWT_SECRET,
       { expiresIn: '6h' }
+    );
+
+    db.prepare('INSERT INTO audit_admin_logins (status, ip_address, token_expires_at) VALUES (?, ?, ?)').run(
+      'successful', clientIp, tokenExpiresAt
     );
 
     res.cookie(ADMIN_COOKIE_NAME, token, {
@@ -149,6 +157,7 @@ router.post('/wipe', auth, (req, res) => {
     });
 
     wipeAll();
+    db.prepare("INSERT INTO audit_website_changes (field, old_value, new_value) VALUES ('Wipe All Data', '', '')").run();
     res.json({ success: true, message: 'All data wiped and defaults restored' });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
@@ -158,6 +167,96 @@ router.post('/wipe', auth, (req, res) => {
 // GET /api/admin/verify — lightweight session check (used by frontend on mount)
 router.get('/verify', auth, (_req, res) => {
   res.json({ authenticated: true });
+});
+
+// ── Audit log endpoints ───────────────────────────────────────────────────────
+
+// GET /api/admin/audit/manual-registrations
+router.get('/audit/manual-registrations', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_manual_registrations ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/azure-registrations
+router.get('/audit/azure-registrations', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_azure_registrations ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/admin-logins
+router.get('/audit/admin-logins', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_admin_logins ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/home-changes
+router.get('/audit/home-changes', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_home_changes ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/reg-changes
+router.get('/audit/reg-changes', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_reg_changes ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/website-changes
+router.get('/audit/website-changes', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_website_changes ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/draw-changes
+router.get('/audit/draw-changes', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_draw_changes ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// GET /api/admin/audit/exp-changes
+router.get('/audit/exp-changes', auth, (_req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT * FROM audit_exp_changes ORDER BY id DESC').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
 });
 
 module.exports = router;

@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const { charSimilarity, normalizePhone } = require('./registration');
 const { pruneSpecialChars, pruneBrackets, pruneCountryCode } = require('../utils/pruning');
+const { sanitizeAuditInput } = require('../utils/sanitize');
 
 // Microsoft Graph API OAuth 2.0 Authorization Code Flow
 // Only an opaque short-lived result token (success / error
@@ -183,7 +184,7 @@ router.get('/microsoft/callback', async (_req, res) => {
     // AND update the variable assignments immediately after the API call.
     const profileRes = await httpsGet(
       'graph.microsoft.com',
-      '/v1.0/me?$select=displayName,mobilePhone',
+      '/v1.0/me?$select=displayName,mobilePhone,mail',
       accessToken
     );
 
@@ -192,9 +193,10 @@ router.get('/microsoft/callback', async (_req, res) => {
       return res.redirect(`/home?authResult=${encodeURIComponent(makeResultToken('err501'))}`);
     }
 
-    // FIELD MAPPING — adjust these two lines if your Graph fields differ
+    // FIELD MAPPING — adjust these lines if your Graph fields differ
     const graphFullName = profileRes.body.displayName;   // Graph field → Full Name
     const graphPhone    = profileRes.body.mobilePhone;   // Graph field → Phone Number
+    const graphEmail    = profileRes.body.mail || '';    // Graph field → Email Address (for audit log)
 
     if (!graphFullName || !graphPhone) {
       // Profile incomplete — cannot validate
@@ -240,10 +242,26 @@ router.get('/microsoft/callback', async (_req, res) => {
           validationRow = allRows.find(r => normalizePhone(r.phone_number) === strippedPhone);
         }
       }
-      if (!validationRow) return 'err406';
+      if (!validationRow) {
+        db.prepare('INSERT INTO audit_azure_registrations (status, full_name, phone_number, email_address) VALUES (?, ?, ?, ?)').run(
+          'rejected',
+          sanitizeAuditInput(graphFullName),
+          sanitizeAuditInput(graphPhone),
+          sanitizeAuditInput(graphEmail)
+        );
+        return 'err406';
+      }
 
       // Full name: ≥85% character-frequency similarity (using pruned name)
-      if (charSimilarity(checkName, validationRow.full_name) < 0.85) return 'err406';
+      if (charSimilarity(checkName, validationRow.full_name) < 0.85) {
+        db.prepare('INSERT INTO audit_azure_registrations (status, full_name, phone_number, email_address) VALUES (?, ?, ?, ?)').run(
+          'rejected',
+          sanitizeAuditInput(graphFullName),
+          sanitizeAuditInput(graphPhone),
+          sanitizeAuditInput(graphEmail)
+        );
+        return 'err406';
+      }
 
       // Duplicate check
       const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(validationRow.staff_id);
@@ -254,6 +272,12 @@ router.get('/microsoft/callback', async (_req, res) => {
         validationRow.full_name,
         validationRow.staff_id,
         validationRow.phone_number
+      );
+      db.prepare('INSERT INTO audit_azure_registrations (status, full_name, phone_number, email_address) VALUES (?, ?, ?, ?)').run(
+        'validated',
+        validationRow.full_name,
+        validationRow.phone_number,
+        sanitizeAuditInput(graphEmail)
       );
 
       return 'success';
