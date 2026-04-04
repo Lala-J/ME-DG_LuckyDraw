@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
 const { emitter, broadcastStatusChange } = require('../events');
+const { pruneSpecialChars, pruneBrackets, pruneCountryCode } = require('../utils/pruning');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -193,15 +194,32 @@ registrationRouter.post('/', async (req, res) => {
         }
       }
 
-      // Look up by phone number in validation_table
+      // Data Pruning experimental flags
+      const ignoreSpecialChars = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_special_chars'").get()?.value === '1';
+      const ignoreCountryCodes = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_country_codes'").get()?.value === '1';
+      const ignoreBrackets     = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_brackets'").get()?.value === '1';
+
+      // Apply name pruning (for comparison only — stored data is never modified)
+      let checkName = trimmedName;
+      if (ignoreBrackets)     checkName = pruneBrackets(checkName);
+      if (ignoreSpecialChars) checkName = pruneSpecialChars(checkName);
+
+      // Look up by phone number; if no direct match and country-code stripping
+      // is enabled, retry with the country code removed.
       const allValidationRows = db.prepare('SELECT * FROM validation_table').all();
-      const validationRow = allValidationRows.find(r => normalizePhone(r.phone_number) === inputPhone);
+      let validationRow = allValidationRows.find(r => normalizePhone(r.phone_number) === inputPhone);
+      if (!validationRow && ignoreCountryCodes) {
+        const strippedPhone = pruneCountryCode(inputPhone);
+        if (strippedPhone !== inputPhone) {
+          validationRow = allValidationRows.find(r => normalizePhone(r.phone_number) === strippedPhone);
+        }
+      }
 
       if (!validationRow) {
         return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
 
-      const similarity = charSimilarity(trimmedName, validationRow.full_name);
+      const similarity = charSimilarity(checkName, validationRow.full_name);
       if (similarity < 0.85) {
         return { status: 400, body: { success: false, message: 'Registration Failed. Double check your Full Name or Phone Number.' } };
       }
@@ -540,6 +558,66 @@ validationRouter.post('/to-registration', auth, (req, res) => {
 
     const inserted = copyAll(rows);
     res.json({ success: true, inserted, total: rows.length });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// PUT /api/validation/entry/:id — update an existing validation entry (Direct Editing)
+validationRouter.put('/entry/:id', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const entryId = parseInt(req.params.id, 10);
+    if (!entryId) return res.status(400).json({ error: 'Invalid entry ID.' });
+
+    const { full_name, staff_id, phone_number, title, department, location } = req.body;
+    if (!full_name || !phone_number) {
+      return res.status(400).json({ error: 'Full Name and Phone Number are required.' });
+    }
+
+    const result = db.prepare(
+      'UPDATE validation_table SET full_name=?, staff_id=?, phone_number=?, title=?, department=?, location=? WHERE id=?'
+    ).run(
+      full_name.trim(),
+      (staff_id || '').trim(),
+      phone_number.trim(),
+      (title || '').trim(),
+      (department || '').trim(),
+      (location || '').trim(),
+      entryId
+    );
+
+    if (result.changes === 0) return res.status(404).json({ error: 'Entry not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// POST /api/validation/entry — add a new validation entry (Additional Entries)
+// The database AUTOINCREMENT assigns the ID; clients cannot specify it,
+// preserving the automatic sequential ordering of the validation table.
+validationRouter.post('/entry', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const { full_name, staff_id, phone_number, title, department, location } = req.body;
+
+    if (!full_name || !phone_number) {
+      return res.status(400).json({ error: 'Full Name and Phone Number are required.' });
+    }
+
+    db.prepare(
+      'INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(
+      full_name.trim(),
+      (staff_id || '').trim(),
+      phone_number.trim(),
+      (title || '').trim(),
+      (department || '').trim(),
+      (location || '').trim()
+    );
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
   }

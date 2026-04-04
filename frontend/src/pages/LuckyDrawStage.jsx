@@ -47,7 +47,7 @@ export default function LuckyDrawStage() {
   });
 
   // Stage Modification config — ref for logic inside closures, state for reactive rendering.
-  const stageModRef = useRef({ enabled: false, noGroup: false, fx: false });
+  const stageModRef = useRef({ enabled: false, noGroup: false, fx: false, cardDelay: 2.5, roundTimeout: 7.0, suspenseDelay: 3.0 });
   const [stageModState, setStageModState] = useState({ enabled: false, noGroup: false, fx: false });
   // Increments each time a new winner card appears during 'revealing'; keyed div re-triggers pulse.
   const [bgFlashKey, setBgFlashKey] = useState(0);
@@ -83,9 +83,12 @@ export default function LuckyDrawStage() {
           };
           const smEnabled = data.exp_stage_mod_enabled === '1';
           const smConfig = {
-            enabled: smEnabled,
-            noGroup: smEnabled && data.exp_stage_mod_no_group === '1',
-            fx:      smEnabled && data.exp_stage_mod_fx      === '1',
+            enabled:       smEnabled,
+            noGroup:       smEnabled && data.exp_stage_mod_no_group === '1',
+            fx:            smEnabled && data.exp_stage_mod_fx      === '1',
+            cardDelay:     smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
+            roundTimeout:  smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
+            suspenseDelay: smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
           };
           stageModRef.current = smConfig;
           setStageModState(smConfig);
@@ -149,7 +152,7 @@ export default function LuckyDrawStage() {
     revealCancelRef.current = false;
 
     let rollCount = 0;
-    const totalRolls = 3000 / 50; // 3 seconds at 50ms intervals
+    const totalRolls = (stageModRef.current.suspenseDelay * 1000) / 50;
 
     rollingIntervalRef.current = setInterval(() => {
       rollCount++;
@@ -175,7 +178,7 @@ export default function LuckyDrawStage() {
             setCurrentRevealingWinner({ ...winnersList[idx], activeFields });
             revealTimerRef.current = setTimeout(() => {
               showNext(idx + 1);
-            }, 2500);
+            }, stageModRef.current.cardDelay * 1000);
           } else {
             // All winners revealed one-by-one
             revealTimerRef.current = null;
@@ -199,7 +202,7 @@ export default function LuckyDrawStage() {
                     setState('intermission');
                   }
                 }, 700);
-              }, 7000);
+              }, stageModRef.current.roundTimeout * 1000);
             } else {
               // Normal flow — switch to grouped summary view
               setRevealedWinners(winnersList);
@@ -223,7 +226,7 @@ export default function LuckyDrawStage() {
                     setState('intermission');
                   }
                 }, 700);
-              }, 7000);
+              }, stageModRef.current.roundTimeout * 1000);
             }
           }
         };
@@ -266,9 +269,12 @@ export default function LuckyDrawStage() {
               };
               const smEnabled = data.exp_stage_mod_enabled === '1';
               const smConfig = {
-                enabled: smEnabled,
-                noGroup: smEnabled && data.exp_stage_mod_no_group === '1',
-                fx:      smEnabled && data.exp_stage_mod_fx      === '1',
+                enabled:       smEnabled,
+                noGroup:       smEnabled && data.exp_stage_mod_no_group === '1',
+                fx:            smEnabled && data.exp_stage_mod_fx      === '1',
+                cardDelay:     smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
+                roundTimeout:  smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
+                suspenseDelay: smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
               };
               stageModRef.current = smConfig;
               setStageModState(smConfig);
@@ -420,7 +426,7 @@ export default function LuckyDrawStage() {
         .stage-container {
           width: 100vw; height: 100vh;
           display: flex; align-items: center; justify-content: center;
-          font-family: 'Rajdhani', sans-serif;
+          font-family: var(--font-body);
           overflow: hidden; position: relative;
         }
         .stage-container::after {
@@ -438,7 +444,7 @@ export default function LuckyDrawStage() {
 
         /* Standby */
         .stage-standby h1 {
-          font-family: 'Orbitron', sans-serif; font-size: 4rem; font-weight: 700;
+          font-family: var(--font-header); font-size: 4rem; font-weight: 700;
           letter-spacing: 0.15em; animation: pulse 3s ease-in-out infinite;
           text-shadow: 0 0 30px rgba(255,255,255,0.3);
         }
@@ -446,9 +452,9 @@ export default function LuckyDrawStage() {
 
         /* Rolling */
         .stage-rolling { display: flex; flex-direction: column; align-items: center; gap: 2rem; }
-        .stage-rolling .round-label { font-family: 'Orbitron', sans-serif; font-size: 2rem; letter-spacing: 0.1em; opacity: 0.8; }
+        .stage-rolling .round-label { font-family: var(--font-header); font-size: 2rem; letter-spacing: 0.1em; opacity: 0.8; }
         .rolling-name {
-          font-family: 'Orbitron', sans-serif; font-size: 5rem; font-weight: 800;
+          font-family: var(--font-header); font-size: 5rem; font-weight: 800;
           animation: rollFlash 0.1s linear infinite;
           text-shadow: 0 0 40px rgba(255,255,255,0.5);
           min-height: 7rem; display: flex; align-items: center; justify-content: center;
@@ -460,7 +466,7 @@ export default function LuckyDrawStage() {
           gap: 1.5rem; width: 100%;
         }
         .stage-revealing .round-label {
-          font-family: 'Orbitron', sans-serif; font-size: 2rem;
+          font-family: var(--font-header); font-size: 2rem;
           letter-spacing: 0.1em; opacity: 0.8;
           animation: glow 2s ease-in-out infinite;
         }
@@ -480,13 +486,13 @@ export default function LuckyDrawStage() {
           text-align: left;
         }
         .winner-prize-left .winner-name {
-          font-family: 'Orbitron', sans-serif; font-size: 2.2rem; font-weight: 700;
+          font-family: var(--font-header); font-size: 2.2rem; font-weight: 700;
           overflow-wrap: break-word; word-break: break-word;
           line-height: 1.25;
         }
         .winner-prize-left .winner-id {
           font-size: 1.3rem; opacity: 0.65; margin-top: 0.5rem;
-          font-family: 'Rajdhani', sans-serif; letter-spacing: 0.05em;
+          font-family: var(--font-body); letter-spacing: 0.05em;
         }
         .winner-prize-right {
           width: 340px; flex-shrink: 0;
@@ -505,12 +511,12 @@ export default function LuckyDrawStage() {
           width: 100%; height: 100%; object-fit: cover;
         }
         .winner-prize-name {
-          font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: 600;
+          font-family: var(--font-header); font-size: 1.1rem; font-weight: 600;
           text-align: center; letter-spacing: 0.04em;
         }
         .winner-prize-id {
           font-size: 0.85rem; opacity: 0.55;
-          font-family: 'Orbitron', sans-serif; letter-spacing: 0.06em;
+          font-family: var(--font-header); letter-spacing: 0.06em;
         }
 
         /* Reveal summary */
@@ -519,7 +525,7 @@ export default function LuckyDrawStage() {
           gap: 1rem; width: 100%; max-height: 100vh; overflow: hidden;
         }
         .stage-reveal .round-label {
-          font-family: 'Orbitron', sans-serif; font-size: 2.5rem;
+          font-family: var(--font-header); font-size: 2.5rem;
           letter-spacing: 0.1em; animation: glow 2s ease-in-out infinite; flex-shrink: 0;
         }
         .stage-reveal.exiting .round-label { animation: fallAndFade 0.45s ease-in forwards; }
@@ -550,7 +556,7 @@ export default function LuckyDrawStage() {
         }
         .winner-reveal-card.compact { padding: 0.75rem 1.5rem; border-radius: 10px; }
         .winner-reveal-card .winner-name {
-          font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700;
+          font-family: var(--font-header); font-size: 2rem; font-weight: 700;
           overflow-wrap: break-word; word-break: break-word;
         }
         .winner-reveal-card.compact .winner-name { font-size: 1.2rem; }
@@ -563,10 +569,10 @@ export default function LuckyDrawStage() {
           animation: fadeInUp 0.6s ease-out both;
         }
         .stage-intermission .intermission-round {
-          font-family: 'Orbitron', sans-serif; font-size: 2rem; letter-spacing: 0.1em; opacity: 0.7;
+          font-family: var(--font-header); font-size: 2rem; letter-spacing: 0.1em; opacity: 0.7;
         }
         .stage-intermission h1 {
-          font-family: 'Orbitron', sans-serif; font-size: 4rem; font-weight: 700;
+          font-family: var(--font-header); font-size: 4rem; font-weight: 700;
           letter-spacing: 0.15em; animation: pulse 3s ease-in-out infinite;
           text-shadow: 0 0 30px rgba(255,255,255,0.3);
         }
@@ -575,7 +581,7 @@ export default function LuckyDrawStage() {
         /* Complete */
         .stage-complete { animation: fadeInUp 0.7s ease-out both; }
         .stage-complete h1 {
-          font-family: 'Orbitron', sans-serif; font-size: 3.5rem; font-weight: 700;
+          font-family: var(--font-header); font-size: 3.5rem; font-weight: 700;
           letter-spacing: 0.1em; animation: glow 2s ease-in-out infinite;
         }
         .stage-complete p { font-size: 1.5rem; opacity: 0.7; margin-top: 1rem; }

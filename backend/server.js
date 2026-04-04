@@ -5,11 +5,107 @@ const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const https = require('https');
 const rateLimit = require('express-rate-limit');
 const { initDatabase, getDb } = require('./db');
 const { broadcastStatusChange } = require('./events');
 
 const isDev = process.env.NODE_ENV !== 'production';
+
+// ── System status helpers ─────────────────────────────────────────────────────
+const SERVER_START_TIME = new Date();
+let _azureCache = null; // { connected, orgName, checkedAt }
+
+function _httpsPostForm(hostname, urlPath, formBody) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname,
+      path: urlPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(formBody),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch (_) { resolve({ status: res.statusCode, body: {} }); }
+      });
+    });
+    req.on('error', reject);
+    req.write(formBody);
+    req.end();
+  });
+}
+
+function _httpsGetBearer(hostname, urlPath, bearerToken) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname,
+      path: urlPath,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+        catch (_) { resolve({ status: res.statusCode, body: {} }); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function checkAzureConnectivity() {
+  const now = Date.now();
+  if (_azureCache && now - _azureCache.checkedAt < 5 * 60 * 1000) {
+    return _azureCache;
+  }
+  const CLIENT_ID     = process.env.AZURE_CLIENT_ID;
+  const TENANT_ID     = process.env.AZURE_TENANT_ID;
+  const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET;
+
+  if (!CLIENT_ID || !TENANT_ID || !CLIENT_SECRET) {
+    _azureCache = { connected: false, orgName: null, checkedAt: now };
+    return _azureCache;
+  }
+  try {
+    const formBody = [
+      `client_id=${encodeURIComponent(CLIENT_ID)}`,
+      `client_secret=${encodeURIComponent(CLIENT_SECRET)}`,
+      `scope=${encodeURIComponent('https://graph.microsoft.com/.default')}`,
+      'grant_type=client_credentials',
+    ].join('&');
+
+    const tokenRes = await _httpsPostForm(
+      'login.microsoftonline.com',
+      `/${TENANT_ID}/oauth2/v2.0/token`,
+      formBody
+    );
+    if (!tokenRes.body.access_token) {
+      _azureCache = { connected: false, orgName: null, checkedAt: now };
+      return _azureCache;
+    }
+
+    const orgRes = await _httpsGetBearer(
+      'graph.microsoft.com',
+      '/v1.0/organization?$select=displayName',
+      tokenRes.body.access_token
+    );
+    const orgName = orgRes.body?.value?.[0]?.displayName || null;
+    _azureCache = { connected: true, orgName, checkedAt: now };
+    return _azureCache;
+  } catch {
+    _azureCache = { connected: false, orgName: null, checkedAt: now };
+    return _azureCache;
+  }
+}
 
 async function startServer() {
   await initDatabase();
@@ -19,6 +115,7 @@ async function startServer() {
   const adminRoutes = require('./routes/admin');
   const luckyDrawRoutes = require('./routes/luckydraw');
   const prizeRoutes = require('./routes/prizes');
+  const fontRoutes = require('./routes/fonts');
   const authRoutes = require('./routes/auth');
 
   const app = express();
@@ -113,6 +210,7 @@ async function startServer() {
   });
 
   app.use('/api/config', configRoutes);
+  app.use('/api/fonts', fontRoutes);
   app.post('/api/admin/login', adminLoginLimiter);
   app.use('/api/admin', adminRoutes);
   app.use('/api/auth/microsoft/login', oauthCallbackLimiter);
@@ -128,6 +226,15 @@ async function startServer() {
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  const authMiddleware = require('./middleware/auth');
+  app.get('/api/system-status', authMiddleware, async (_req, res) => {
+    const azure = await checkAzureConnectivity();
+    res.json({
+      startTime: SERVER_START_TIME.toISOString(),
+      azure: { connected: azure.connected, orgName: azure.orgName },
+    });
   });
 
   // Global error handler

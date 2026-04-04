@@ -183,11 +183,253 @@ function TablePopup({
   );
 }
 
+// ── Validation Table Full-View Modal (with Direct Editing / Additional Entries) ──
+function ValidationFullViewModal({
+  data, columns, page, totalPages, search,
+  onSearchChange, onPageChange, onClose,
+  renderCell, startIndex,
+  validationEditing, additionalEntries,
+  getAuthHeaders, onDataChange,
+}) {
+  const [visible, setVisible] = useState(false);
+  const windowRef = useRef(null);
+
+  // Edit / add panel state
+  const [editMode, setEditMode] = useState(null); // null | 'edit' | 'add'
+  const [editRow,  setEditRow]  = useState(null);
+  const EMPTY_FORM = { full_name: '', staff_id: '', phone_number: '', title: '', department: '', location: '' };
+  const [form,    setForm]    = useState(EMPTY_FORM);
+  const [saving,  setSaving]  = useState(false);
+  const [editMsg, setEditMsg] = useState(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+  }, []);
+
+  const close = () => { setVisible(false); setTimeout(onClose, 300); };
+  const handleBackdropClick = (e) => {
+    if (windowRef.current && !windowRef.current.contains(e.target)) close();
+  };
+
+  const openEdit = (row) => {
+    setEditRow(row);
+    setForm({
+      full_name:    row.full_name    || '',
+      staff_id:     row.staff_id     || '',
+      phone_number: row.phone_number || '',
+      title:        row.title        || '',
+      department:   row.department   || '',
+      location:     row.location     || '',
+    });
+    setEditMsg(null);
+    setEditMode('edit');
+  };
+
+  const openAdd = () => {
+    setEditRow(null);
+    setForm(EMPTY_FORM);
+    setEditMsg(null);
+    setEditMode('add');
+  };
+
+  const closeEdit = () => { setEditMode(null); setEditMsg(null); };
+
+  const handleFormChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSave = async () => {
+    if (!form.full_name.trim() || !form.phone_number.trim()) {
+      setEditMsg({ type: 'error', text: 'Full Name and Phone Number are required.' });
+      return;
+    }
+    setSaving(true);
+    setEditMsg(null);
+    try {
+      const url    = editMode === 'edit' ? `/api/validation/entry/${editRow.id}` : '/api/validation/entry';
+      const method = editMode === 'edit' ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify(form),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEditMsg({ type: 'success', text: editMode === 'edit' ? 'Entry updated.' : 'Entry added.' });
+        onDataChange?.();
+        // Briefly show success then close the panel
+        setTimeout(() => closeEdit(), 1200);
+      } else {
+        setEditMsg({ type: 'error', text: payload.error || 'Failed to save.' });
+      }
+    } catch {
+      setEditMsg({ type: 'error', text: 'Network error.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderPagination = () => {
+    const showPrevNext = totalPages > 5;
+    let start = Math.max(1, page - 2);
+    let end   = start + 4;
+    if (end > totalPages) { end = totalPages; start = Math.max(1, end - 4); }
+    const pages = [];
+    for (let i = start; i <= end; i++) pages.push(i);
+    return (
+      <div className="pagination">
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button>
+        )}
+        {pages.map(p => (
+          <button key={p} className={`btn btn-small ${p === page ? 'btn-primary' : 'btn-outline'}`} onClick={() => onPageChange(p)}>{p}</button>
+        ))}
+        {showPrevNext && (
+          <button className="btn btn-small btn-outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Next</button>
+        )}
+      </div>
+    );
+  };
+
+  const FIELDS = [
+    { key: 'full_name',    label: 'Full Name',    required: true  },
+    { key: 'staff_id',     label: 'Staff ID',     required: false },
+    { key: 'phone_number', label: 'Phone Number', required: true  },
+    { key: 'title',        label: 'Title',        required: false },
+    { key: 'department',   label: 'Department',   required: false },
+    { key: 'location',     label: 'Location',     required: false },
+  ];
+
+  return (
+    <div
+      className={`table-modal-backdrop${visible ? ' table-modal-backdrop--visible' : ''}`}
+      onClick={handleBackdropClick}
+    >
+      <div
+        className={`table-modal-window${visible ? ' table-modal-window--visible' : ''}`}
+        ref={windowRef}
+      >
+        {/* ── Header ── */}
+        <div className="table-modal-header">
+          {editMode ? (
+            <>
+              <h3>
+                <button className="val-edit-back-btn" onClick={closeEdit}>&#8592; Back</button>
+                {editMode === 'edit' ? 'Edit Entry' : 'Add New Entry'}
+              </h3>
+            </>
+          ) : (
+            <>
+              <h3>
+                Validation Table — Full View
+                {additionalEntries && (
+                  <button className="btn btn-download btn-small val-add-entry-btn" onClick={openAdd}>
+                    + Add New Entry
+                  </button>
+                )}
+              </h3>
+            </>
+          )}
+          <button className="modal-close-btn" onClick={close}>&#x2715;</button>
+        </div>
+
+        {editMode ? (
+          /* ── Edit / Add form ── */
+          <div className="val-edit-body">
+            <div className="val-edit-form">
+              {FIELDS.map(f => (
+                <div key={f.key} className="val-edit-field">
+                  <label className="val-edit-label">
+                    {f.label}{f.required && <span className="val-edit-required"> *</span>}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={form[f.key]}
+                    onChange={(e) => handleFormChange(f.key, e.target.value)}
+                    placeholder={f.required ? `${f.label} (required)` : f.label}
+                  />
+                </div>
+              ))}
+            </div>
+            {editMsg && (
+              <p className={editMsg.type === 'error' ? 'exp-backend-msg--error val-edit-msg' : 'exp-backend-msg--success val-edit-msg'}>
+                {editMsg.text}
+              </p>
+            )}
+            <div className="val-edit-actions">
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={saving || !form.full_name.trim() || !form.phone_number.trim()}
+              >
+                {saving ? 'Saving…' : 'Save Entry'}
+              </button>
+              <button className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          /* ── Table list view ── */
+          <>
+            <div className="table-modal-search">
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search for Full Name, Staff ID, Phone Number or Department..."
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="table-modal-body">
+              {(!data || data.length === 0) ? (
+                <p className="empty-text">No data available.</p>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>{columns.map(col => <th key={col.key}>{col.label}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {data.map((row, idx) => (
+                        <tr
+                          key={idx}
+                          className={validationEditing ? 'val-row-editable' : ''}
+                          onClick={validationEditing ? () => openEdit(row) : undefined}
+                        >
+                          {columns.map(col => (
+                            <td key={col.key} onClick={validationEditing && col.key === '_add' ? (e) => e.stopPropagation() : undefined}>
+                              {renderCell ? renderCell(col, row, startIndex + idx) : (
+                                col.key === 'id' ? startIndex + idx + 1 : row[col.key]
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="table-modal-footer">
+              {renderPagination()}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main Component
 export default function RegistrationConfig() {
   const { getAuthHeaders } = useAuth();
   const { config } = useConfig();
   const navigate = useNavigate();
+
+  // Backend Experimental Feature flags (read from global config on mount)
+  const bulkRegEnabled      = config.exp_bulk_reg_enabled      === '1';
+  const selectiveRegEnabled = config.exp_selective_reg_enabled === '1';
+  const validationEditing   = config.exp_validation_editing    === '1';
+  const additionalEntries   = config.exp_additional_entries    === '1';
 
   const prizeBadgeStyle = {
     background: `linear-gradient(135deg, ${config.bg_color1 || '#667eea'} 0%, ${config.bg_color2 || '#764ba2'} 100%)`,
@@ -233,6 +475,7 @@ export default function RegistrationConfig() {
 
   // Password modal
   const [pwModal, setPwModal] = useState(null); // { title, onConfirm }
+
 
   // Hidden file input ref for upload-after-auth flow
   const uploadInputRef = useRef(null);
@@ -654,6 +897,8 @@ export default function RegistrationConfig() {
         className="btn btn-primary btn-small"
         style={{ whiteSpace: 'nowrap' }}
         onClick={() => handleAddToRegistration(row)}
+        disabled={!selectiveRegEnabled}
+        title={!selectiveRegEnabled ? 'Enable Selective Registration in Experimental Features → Registration Handling' : ''}
       >
         Add
       </button>
@@ -751,7 +996,12 @@ export default function RegistrationConfig() {
                   {uploading ? 'Uploading…' : 'Choose File…'}
                 </button>
               </div>
-              <button className="btn btn-primary reg-action-btn" onClick={handleCopyToRegistration} disabled={copying}>
+              <button
+                className="btn btn-primary reg-action-btn"
+                onClick={handleCopyToRegistration}
+                disabled={copying || !bulkRegEnabled}
+                title={!bulkRegEnabled ? 'Enable Bulk Registration in Experimental Features → Registration Handling' : ''}
+              >
                 {copying ? 'Copying...' : 'Copy Validation to Registration'}
               </button>
             </div>
@@ -862,10 +1112,9 @@ export default function RegistrationConfig() {
         </div>
       </div>
 
-      {/* Validation Table Popup */}
+      {/* Validation Table Popup (with Direct Editing support) */}
       {validationPopupOpen && (
-        <TablePopup
-          title="Validation Table — Full View"
+        <ValidationFullViewModal
           data={validationPopupData.data}
           columns={validationPopupColumns}
           page={validationPopupPage}
@@ -876,6 +1125,10 @@ export default function RegistrationConfig() {
           onClose={() => setValidationPopupOpen(false)}
           renderCell={renderValidationPopupCell}
           startIndex={(validationPopupPage - 1) * LIMIT}
+          validationEditing={validationEditing}
+          additionalEntries={additionalEntries}
+          getAuthHeaders={getAuthHeaders}
+          onDataChange={() => fetchValidationPopup(validationPopupPage, validationPopupSearch)}
         />
       )}
 

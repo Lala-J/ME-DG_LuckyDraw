@@ -32,6 +32,60 @@ export function ConfigProvider({ children }) {
     fetchConfig();
   }, [fetchConfig]);
 
+  // Inject custom font @font-face + CSS variable overrides whenever the font
+  // experiment config changes. A single <style id="exp-font-override"> in
+  // <head> is created on first use and updated in-place on subsequent changes.
+  useEffect(() => {
+    const styleId = 'exp-font-override';
+
+    if (config.exp_font_enabled !== '1') {
+      const el = document.getElementById(styleId);
+      if (el) el.remove();
+      return;
+    }
+
+    const headerFontId = config.exp_font_header_id;
+    const bodyFontId   = config.exp_font_body_id;
+
+    if ((!headerFontId || headerFontId === 'default') &&
+        (!bodyFontId   || bodyFontId   === 'default')) {
+      const el = document.getElementById(styleId);
+      if (el) el.remove();
+      return;
+    }
+
+    fetch('/api/fonts')
+      .then(r => r.ok ? r.json() : [])
+      .then(fonts => {
+        const headerFont = headerFontId && headerFontId !== 'default'
+          ? fonts.find(f => String(f.id) === String(headerFontId))
+          : null;
+        const bodyFont = bodyFontId && bodyFontId !== 'default'
+          ? fonts.find(f => String(f.id) === String(bodyFontId))
+          : null;
+
+        let css = '';
+
+        if (headerFont) {
+          css += `@font-face { font-family: '${headerFont.css_family}'; src: url('/api/fonts/file/${headerFont.filename}') format('${headerFont.format}'); font-weight: 100 900; }\n`;
+          css += `:root { --font-header: '${headerFont.css_family}', 'Orbitron', sans-serif; }\n`;
+        }
+        if (bodyFont) {
+          css += `@font-face { font-family: '${bodyFont.css_family}'; src: url('/api/fonts/file/${bodyFont.filename}') format('${bodyFont.format}'); font-weight: 100 900; }\n`;
+          css += `:root { --font-body: '${bodyFont.css_family}', 'Rajdhani', sans-serif; }\n`;
+        }
+
+        let styleEl = document.getElementById(styleId);
+        if (!styleEl) {
+          styleEl = document.createElement('style');
+          styleEl.id = styleId;
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = css;
+      })
+      .catch(() => {});
+  }, [config.exp_font_enabled, config.exp_font_header_id, config.exp_font_body_id]);
+
   const refreshConfig = useCallback(() => {
     return fetchConfig();
   }, [fetchConfig]);

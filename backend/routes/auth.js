@@ -5,6 +5,7 @@ const https = require('https');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const { charSimilarity, normalizePhone } = require('./registration');
+const { pruneSpecialChars, pruneBrackets, pruneCountryCode } = require('../utils/pruning');
 
 // Microsoft Graph API OAuth 2.0 Authorization Code Flow
 // Only an opaque short-lived result token (success / error
@@ -217,14 +218,32 @@ router.get('/microsoft/callback', async (_req, res) => {
         }
       }
 
-      // Phone number: 100% match (normalised — digits only)
+      // Data Pruning experimental flags
+      const ignoreSpecialChars = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_special_chars'").get()?.value === '1';
+      const ignoreCountryCodes = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_country_codes'").get()?.value === '1';
+      const ignoreBrackets     = db.prepare("SELECT value FROM config WHERE key = 'exp_ignore_brackets'").get()?.value === '1';
+
+      // Apply name pruning (comparison only — stored data is never modified)
+      let checkName = graphFullName;
+      if (ignoreBrackets)     checkName = pruneBrackets(checkName);
+      if (ignoreSpecialChars) checkName = pruneSpecialChars(checkName);
+
+      // Phone number: 100% match (normalised — digits only).
+      // If country-code stripping is enabled and no direct match is found,
+      // retry with the leading country code removed.
       const inputPhone = normalizePhone(graphPhone);
       const allRows = db.prepare('SELECT * FROM validation_table').all();
-      const validationRow = allRows.find(r => normalizePhone(r.phone_number) === inputPhone);
+      let validationRow = allRows.find(r => normalizePhone(r.phone_number) === inputPhone);
+      if (!validationRow && ignoreCountryCodes) {
+        const strippedPhone = pruneCountryCode(inputPhone);
+        if (strippedPhone !== inputPhone) {
+          validationRow = allRows.find(r => normalizePhone(r.phone_number) === strippedPhone);
+        }
+      }
       if (!validationRow) return 'err406';
 
-      // Full name: ≥85% character-frequency similarity
-      if (charSimilarity(graphFullName, validationRow.full_name) < 0.85) return 'err406';
+      // Full name: ≥85% character-frequency similarity (using pruned name)
+      if (charSimilarity(checkName, validationRow.full_name) < 0.85) return 'err406';
 
       // Duplicate check
       const existing = db.prepare('SELECT id FROM registration_table WHERE staff_id = ?').get(validationRow.staff_id);

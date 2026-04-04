@@ -145,7 +145,7 @@ export default function HomeScreenConfig() {
                 placeholder="e.g. Metaelyon (used in registration page subtitle)"
               />
               <p className="form-hint">
-                Shown in the Registration page as: &ldquo;Ensure your Phone Number is the same phone number provided to <strong>{organisation || 'UNDEFINED'}</strong>.&rdquo;
+                Shown in the Manual Registration modal as: &ldquo;Ensure your Phone Number is the same phone number provided to <strong>{organisation || 'UNDEFINED'}</strong>.&rdquo;
               </p>
             </div>
 

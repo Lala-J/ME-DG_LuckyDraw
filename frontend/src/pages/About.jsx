@@ -44,7 +44,7 @@ export default function About() {
           align-items: center;
           justify-content: center;
           padding: 3rem 1rem;
-          font-family: 'Rajdhani', sans-serif;
+          font-family: var(--font-body);
           background: linear-gradient(-45deg, #000000, #350160, #4d0f41, #000000);
           background-size: 400% 400%;
           animation: aboutGradientShift ${speed}s ease infinite;
@@ -78,7 +78,7 @@ export default function About() {
         }
 
         .about-heading {
-          font-family: 'Orbitron', sans-serif;
+          font-family: var(--font-header);
           font-size: 1.5rem;
           font-weight: 700;
           letter-spacing: 0.1em;
@@ -90,7 +90,7 @@ export default function About() {
         }
 
         .about-subheading {
-          font-family: 'Rajdhani', sans-serif;
+          font-family: var(--font-body);
           font-size: 0.95rem;
           font-weight: 500;
           letter-spacing: 0.12em;
@@ -106,7 +106,7 @@ export default function About() {
         }
 
         .about-license {
-          font-family: 'Rajdhani', sans-serif;
+          font-family: var(--font-body);
           font-size: 0.92rem;
           line-height: 1.75;
           color: rgba(255, 255, 255, 0.65);

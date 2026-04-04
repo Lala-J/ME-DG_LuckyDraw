@@ -1,3 +1,9 @@
+/* ========== Font Variables ========== */
+:root {
+  --font-header: 'Orbitron', sans-serif;
+  --font-body: 'Rajdhani', sans-serif;
+}
+
 /* ========== CSS Reset & Base ========== */
 *, *::before, *::after {
   margin: 0;
@@ -11,7 +17,7 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-body);
   font-weight: 500;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -20,7 +26,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.3;
@@ -137,7 +143,7 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.7rem 1.8rem;
   border: none;
   border-radius: 10px;
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-body);
   font-weight: 600;
   font-size: 1rem;
   letter-spacing: 0.05em;
@@ -248,7 +254,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .form-label {
   display: block;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -264,7 +270,7 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-body);
   font-size: 1rem;
   font-weight: 500;
   transition: all 0.25s ease;
@@ -301,7 +307,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .range-value {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 1.1rem;
   font-weight: 700;
   margin-left: 0.75rem;
@@ -370,7 +376,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 0.5rem;
   padding: 0.5rem 1.25rem;
   border-radius: 50px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -414,7 +420,7 @@ h1, h2, h3, h4, h5, h6 {
 .reg-countdown-timer {
   display: inline-flex;
   align-items: center;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -484,7 +490,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .countdown-value {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -626,7 +632,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .dashboard-nav-label {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -789,7 +795,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .data-table th {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1014,7 +1020,7 @@ h1, h2, h3, h4, h5, h6 {
 .round-name-input {
   width: 100%;
   padding: 0.4rem 0.75rem;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -1045,7 +1051,7 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(102, 126, 234, 0.3);
   border-radius: 20px;
   font-size: 0.78rem;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
 }
 
 .round-card-footer {
@@ -1069,7 +1075,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .round-winners-table th {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -1271,7 +1277,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .prize-id-badge {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1892,7 +1898,7 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(0,0,0,0.12);
 }
 .exp-section-divider-text {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1942,7 +1948,7 @@ h1, h2, h3, h4, h5, h6 {
   margin-left: auto;
 }
 .exp-toggle-label-text {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -2043,7 +2049,7 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(255,255,255,0.1);
   border: 1px solid rgba(255,255,255,0.2);
   color: inherit;
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -2067,7 +2073,7 @@ h1, h2, h3, h4, h5, h6 {
   border-color: rgba(102,126,234,0.5);
 }
 .exp-field-preview-text {
-  font-family: 'Rajdhani', sans-serif;
+  font-family: var(--font-body);
   font-size: 1rem;
   opacity: 0.65;
   padding-left: 0.25rem;
@@ -2075,7 +2081,7 @@ h1, h2, h3, h4, h5, h6 {
   word-break: break-word;
 }
 .exp-field-preview-text--primary {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 1.25rem;
   font-weight: 700;
   opacity: 1;
@@ -2107,7 +2113,7 @@ h1, h2, h3, h4, h5, h6 {
   object-fit: cover;
 }
 .exp-winner-preview-prize-name {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.9rem;
   font-weight: 600;
   text-align: center;
@@ -2115,7 +2121,7 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.8;
 }
 .exp-winner-preview-prize-id {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.72rem;
   opacity: 0.45;
   letter-spacing: 0.06em;
@@ -2184,7 +2190,7 @@ h1, h2, h3, h4, h5, h6 {
   min-width: 0;
 }
 .exp-option-left h4 {
-  font-family: 'Orbitron', sans-serif;
+  font-family: var(--font-header);
   font-size: 0.9rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
@@ -2206,13 +2212,443 @@ h1, h2, h3, h4, h5, h6 {
   gap: 0.35rem;
   flex-shrink: 0;
 }
-.exp-fx-warning {
-  font-style: italic;
-  color: rgba(255, 200, 100, 0.85) !important;
-  opacity: 1 !important;
+/* Font Family Modal */
+.exp-font-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
-.theme-light-bg .exp-fx-warning {
-  color: rgba(160, 90, 0, 0.85) !important;
+.exp-font-row {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+}
+.theme-light-bg .exp-font-row {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.08);
+}
+.exp-font-row-label {
+  flex: 1;
+  min-width: 0;
+}
+.exp-font-row-label h4 {
+  font-family: var(--font-header);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.03em;
+}
+.exp-font-row-label p {
+  font-size: 0.83rem;
+  opacity: 0.6;
+  line-height: 1.55;
+  margin: 0;
+}
+.exp-font-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+.exp-font-select {
+  padding: 0.35rem 0.6rem;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  min-width: 160px;
+  cursor: pointer;
+}
+.exp-font-select:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.4);
+}
+.theme-light-bg .exp-font-select {
+  border-color: rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.04);
+}
+.exp-font-option--default {
+  color: rgba(150,150,150,0.8);
+  font-style: italic;
+}
+.exp-font-upload-btn {
+  white-space: nowrap;
+}
+.exp-font-error {
+  font-size: 0.8rem;
+  color: rgba(255, 120, 100, 0.9);
+  margin: 0;
+}
+.theme-light-bg .exp-font-error {
+  color: rgba(180, 40, 20, 0.85);
+}
+.exp-font-library {
+  padding: 1rem 1.5rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+}
+.theme-light-bg .exp-font-library {
+  background: rgba(0,0,0,0.02);
+  border-color: rgba(0,0,0,0.06);
+}
+.exp-font-library-title {
+  font-family: var(--font-header);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.5;
+  text-transform: uppercase;
+  margin: 0 0 0.75rem;
+}
+.exp-font-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.exp-font-library-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+}
+.theme-light-bg .exp-font-library-item {
+  background: rgba(0,0,0,0.03);
+}
+.exp-font-library-name {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.exp-font-library-fmt {
+  font-size: 0.7rem;
+  opacity: 0.4;
+  font-family: monospace;
+}
+.exp-font-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.4;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  transition: opacity 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+.exp-font-delete-btn:hover {
+  opacity: 0.9;
+  background: rgba(255, 80, 80, 0.15);
+}
+.theme-light-bg .exp-font-delete-btn:hover {
+  background: rgba(200, 30, 10, 0.1);
+}
+
+/* Transition Adjustments inputs */
+.exp-transition-row {
+  align-items: flex-start;
+}
+.exp-transition-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex-shrink: 0;
+  min-width: 210px;
+}
+.exp-transition-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.exp-transition-label {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+.exp-transition-control {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.exp-transition-number {
+  width: 62px;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  font-family: var(--font-header);
+  font-size: 0.8rem;
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.exp-transition-number::-webkit-inner-spin-button,
+.exp-transition-number::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.exp-transition-number:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.45);
+}
+.exp-transition-number:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.exp-transition-unit {
+  font-size: 0.75rem;
+  opacity: 0.45;
+}
+.theme-light-bg .exp-transition-number {
+  border-color: rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.04);
+}
+
+/* ========== Backend Experimental Feature option rows ========== */
+/* The right-hand side of a backend option row stacks the toggle,
+   the password field, and the Save button vertically. */
+.exp-backend-option-right {
+  min-width: 160px;
+  align-items: flex-end;
+}
+
+/* Row that holds the password input + Save button side-by-side */
+.exp-backend-save-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+/* Compact password input inside the save row */
+.exp-backend-pw-input {
+  width: 110px;
+  padding: 0.3rem 0.55rem;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+}
+.exp-backend-pw-input:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.4);
+}
+.theme-light-bg .exp-backend-pw-input {
+  border-color: rgba(0,0,0,0.15);
+  background: rgba(0,0,0,0.04);
+}
+
+/* Feedback text beneath the save row */
+.exp-backend-msg--error {
+  font-size: 0.75rem;
+  color: rgba(255,100,90,0.9);
+  margin: 0.3rem 0 0;
+  text-align: right;
+}
+.exp-backend-msg--success {
+  font-size: 0.75rem;
+  color: rgba(80,220,130,0.9);
+  margin: 0.3rem 0 0;
+  text-align: right;
+}
+.theme-light-bg .exp-backend-msg--error   { color: rgba(190,30,20,0.85); }
+.theme-light-bg .exp-backend-msg--success { color: rgba(20,130,60,0.85); }
+
+/* Loading placeholder shown while config fetches */
+.exp-backend-loading {
+  text-align: center;
+  opacity: 0.5;
+  font-size: 0.9rem;
+  padding: 2rem 0;
+}
+
+/* ========== Validation Table — Direct Editing styles ========== */
+/* Clickable table rows when Validation Editing is on */
+.val-row-editable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.val-row-editable:hover {
+  background: rgba(255,255,255,0.07);
+}
+.theme-light-bg .val-row-editable:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+/* "Add New Entry" button in the Validation popup header (green gradient) */
+.val-add-entry-btn {
+  margin-left: 0.75rem;
+  font-size: 0.78rem;
+  vertical-align: middle;
+}
+
+/* Back button inside the edit-mode header */
+.val-edit-back-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+  margin-right: 0.6rem;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+.val-edit-back-btn:hover { opacity: 1; }
+
+/* Edit / Add form container */
+.val-edit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.val-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.val-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.val-edit-label {
+  font-size: 0.83rem;
+  opacity: 0.75;
+  font-family: var(--font-body);
+  letter-spacing: 0.02em;
+}
+
+.val-edit-required {
+  color: rgba(255,100,90,0.9);
+}
+.theme-light-bg .val-edit-required { color: rgba(190,30,20,0.85); }
+
+/* Feedback message inside the edit form */
+.val-edit-msg {
+  margin: 0;
+}
+
+/* Save / Cancel button row */
+.val-edit-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+/* ========== Audit Logs Page ========== */
+
+.audit-status-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.audit-status-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.theme-light-bg .audit-status-box {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.audit-status-box-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audit-status-icon {
+  width: 28px;
+  height: 28px;
+  opacity: 0.75;
+  color: currentColor;
+}
+
+.audit-status-icon--img {
+  object-fit: contain;
+  color: unset;
+}
+
+.audit-status-box-label {
+  font-family: var(--font-header);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.audit-status-box-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.audit-status-data {
+  font-family: var(--font-header);
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+}
+
+.audit-status-data--unavailable {
+  opacity: 0.45;
+}
+
+.audit-status-loading {
+  font-size: 0.82rem;
+  opacity: 0.5;
+}
+
+.audit-status-org {
+  font-size: 0.8rem;
+  opacity: 0.75;
+  font-style: italic;
+}
+
+/* Single-column button list */
+.audit-btn-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.audit-btn-col .exp-feature-btn {
+  max-width: 480px;
+  align-self: center;
+  width: 100%;
 }
 
 /* ========== Responsive ========== */

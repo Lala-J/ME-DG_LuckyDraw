@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
 
@@ -52,6 +53,53 @@ router.get('/', (req, res) => {
   }
 });
 
+// PUT /api/config/secure - auth + admin-password verification required.
+// Used by the Backend Experimental Features modals so that each setting
+// change requires the admin to re-confirm their password.
+router.put('/secure', auth, (req, res) => {
+  try {
+    const db = getDb();
+    const { password, ...updates } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
+    }
+
+    const admin = db.prepare('SELECT * FROM admin WHERE id = 1').get();
+    if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
+      return res.status(401).json({ error: 'Incorrect password.' });
+    }
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No settings provided.' });
+    }
+
+    const upsert = db.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    for (const [key, value] of Object.entries(updates)) {
+      upsert.run(key, String(value));
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: process.env.NODE_ENV !== 'production' ? err.message : 'Internal server error' });
+  }
+});
+
+// Keys that may be written without password re-verification.
+// Experimental feature flags and other sensitive keys are intentionally
+// excluded — they must go through PUT /api/config/secure.
+const UNPROTECTED_CONFIG_KEYS = new Set([
+  'heading_text',
+  'subtitle_text',
+  'logo_size',
+  'organisation',
+  'bg_color1',
+  'bg_color2',
+  'bg_color3',
+  'bg_animation_speed',
+  'copyright_visible',
+]);
+
 // PUT /api/config - auth required
 router.put('/', auth, (req, res) => {
   try {
@@ -59,6 +107,11 @@ router.put('/', auth, (req, res) => {
     const updates = req.body;
     if (!updates || typeof updates !== 'object') {
       return res.status(400).json({ error: 'Request body must be a JSON object' });
+    }
+
+    const forbidden = Object.keys(updates).filter(k => !UNPROTECTED_CONFIG_KEYS.has(k));
+    if (forbidden.length > 0) {
+      return res.status(403).json({ error: `These keys require password verification: ${forbidden.join(', ')}` });
     }
 
     const upsert = db.prepare('INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');

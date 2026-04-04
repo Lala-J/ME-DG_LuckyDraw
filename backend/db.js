@@ -178,6 +178,14 @@ async function initDatabase() {
       prize_id TEXT NOT NULL,
       UNIQUE(prize_id)
     );
+
+    CREATE TABLE IF NOT EXISTS fonts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      display_name TEXT NOT NULL,
+      css_family TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      format TEXT NOT NULL
+    );
   `);
 
   // Seed default admin if none exists
@@ -203,7 +211,15 @@ async function initDatabase() {
     registration_end_time: '',
     copyright_visible: '1',
     lucky_draw_rounds: '0',
-    organisation: ''
+    organisation: '',
+    // Backend Experimental Features
+    exp_bulk_reg_enabled:       '0',
+    exp_selective_reg_enabled:  '0',
+    exp_ignore_special_chars:   '0',
+    exp_ignore_country_codes:   '0',
+    exp_ignore_brackets:        '0',
+    exp_validation_editing:     '0',
+    exp_additional_entries:     '0',
   };
 
   const insertConfig = db.prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)');
