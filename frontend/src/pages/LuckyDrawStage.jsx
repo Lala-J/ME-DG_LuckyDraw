@@ -47,8 +47,8 @@ export default function LuckyDrawStage() {
   });
 
   // Stage Modification config — ref for logic inside closures, state for reactive rendering.
-  const stageModRef = useRef({ enabled: false, noGroup: false, fx: false, cardDelay: 2.5, roundTimeout: 7.0, suspenseDelay: 3.0 });
-  const [stageModState, setStageModState] = useState({ enabled: false, noGroup: false, fx: false });
+  const stageModRef = useRef({ enabled: false, noGroup: false, fx: false, manualSuspense: false, cardDelay: 2.5, roundTimeout: 7.0, suspenseDelay: 3.0 });
+  const [stageModState, setStageModState] = useState({ enabled: false, noGroup: false, fx: false, manualSuspense: false });
   // Increments each time a new winner card appears during 'revealing'; keyed div re-triggers pulse.
   const [bgFlashKey, setBgFlashKey] = useState(0);
 
@@ -59,6 +59,12 @@ export default function LuckyDrawStage() {
   const transitionTimeoutRef = useRef(null);
   const revealTimerRef = useRef(null);
   const revealCancelRef = useRef(false);
+  // Manual Suspense state — holds the next winner index awaiting an
+  // "Identify Winner" trigger from the admin. -1 means no pending reveal.
+  const pendingManualIdxRef = useRef(-1);
+  // Function set inside revealWinners() that advances the manual reveal.
+  // The broadcast handler invokes it when the admin clicks "Identify Winner".
+  const manualAdvanceRef = useRef(null);
 
   // Fetch site config for gradient + winner card + stage mod experimental settings
   useEffect(() => {
@@ -83,12 +89,13 @@ export default function LuckyDrawStage() {
           };
           const smEnabled = data.exp_stage_mod_enabled === '1';
           const smConfig = {
-            enabled:       smEnabled,
-            noGroup:       smEnabled && data.exp_stage_mod_no_group === '1',
-            fx:            smEnabled && data.exp_stage_mod_fx      === '1',
-            cardDelay:     smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
-            roundTimeout:  smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
-            suspenseDelay: smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
+            enabled:        smEnabled,
+            noGroup:        smEnabled && data.exp_stage_mod_no_group        === '1',
+            fx:             smEnabled && data.exp_stage_mod_fx              === '1',
+            manualSuspense: smEnabled && data.exp_stage_mod_manual_suspense === '1',
+            cardDelay:      smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
+            roundTimeout:   smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
+            suspenseDelay:  smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
           };
           stageModRef.current = smConfig;
           setStageModState(smConfig);
@@ -140,6 +147,8 @@ export default function LuckyDrawStage() {
       clearTimeout(transitionTimeoutRef.current);
       transitionTimeoutRef.current = null;
     }
+    pendingManualIdxRef.current = -1;
+    manualAdvanceRef.current = null;
   }, []);
 
   const revealWinners = useCallback((winnersList, roundNumber, roundName, totalRnds, namePool) => {
@@ -150,90 +159,120 @@ export default function LuckyDrawStage() {
     setRevealedWinners([]);
     setTotalWinnersCount(winnersList.length);
     revealCancelRef.current = false;
+    pendingManualIdxRef.current = -1;
+    manualAdvanceRef.current = null;
 
-    let rollCount = 0;
+    const manual = stageModRef.current.manualSuspense;
     const totalRolls = (stageModRef.current.suspenseDelay * 1000) / 50;
 
-    rollingIntervalRef.current = setInterval(() => {
-      rollCount++;
-      const randomIdx = Math.floor(Math.random() * namePool.length);
-      setRollingName(namePool[randomIdx]);
+    const cfg = winnerCardConfigRef.current;
+    const activeFields = cfg.enabled
+      ? cfg.fields.filter(f => f !== 'disabled')
+      : ['full_name', 'staff_id'];
 
-      if (rollCount >= totalRolls) {
-        stopRolling();
-        setState('revealing');
+    // Finalises the round once every winner has been shown.
+    const finishRound = () => {
+      revealTimerRef.current = null;
 
-        // Show winners one by one, 2 seconds each.
-        // Active fields are baked into each winner object here so JSX
-        // never needs to read the ref (refs don't trigger re-renders).
-        const cfg = winnerCardConfigRef.current;
-        const activeFields = cfg.enabled
-          ? cfg.fields.filter(f => f !== 'disabled')
-          : ['full_name', 'staff_id'];
-
-        const showNext = (idx) => {
-          if (revealCancelRef.current) return;
-
-          if (idx < winnersList.length) {
-            setCurrentRevealingWinner({ ...winnersList[idx], activeFields });
-            revealTimerRef.current = setTimeout(() => {
-              showNext(idx + 1);
-            }, stageModRef.current.cardDelay * 1000);
-          } else {
-            // All winners revealed one-by-one
-            revealTimerRef.current = null;
-
-            if (stageModRef.current.noGroup) {
-              // "Disable Grouped Winners" is on — skip the summary screen.
-              // The last winner card stays visible; after 7 s transition out.
-              if (channelRef.current) {
-                channelRef.current.postMessage({ type: 'round_complete', roundNumber });
-              }
-              exitTimeoutRef.current = setTimeout(() => {
-                exitTimeoutRef.current = null;
-                setIsExiting(true);
-                transitionTimeoutRef.current = setTimeout(() => {
-                  transitionTimeoutRef.current = null;
-                  setIsExiting(false);
-                  if (roundNumber >= totalRnds) {
-                    setAllComplete(true);
-                  } else {
-                    setNextRound(roundNumber + 1);
-                    setState('intermission');
-                  }
-                }, 700);
-              }, stageModRef.current.roundTimeout * 1000);
+      if (stageModRef.current.noGroup) {
+        // "Disable Grouped Winners" is on — skip the summary screen.
+        if (channelRef.current) {
+          channelRef.current.postMessage({ type: 'round_complete', roundNumber });
+        }
+        exitTimeoutRef.current = setTimeout(() => {
+          exitTimeoutRef.current = null;
+          setIsExiting(true);
+          transitionTimeoutRef.current = setTimeout(() => {
+            transitionTimeoutRef.current = null;
+            setIsExiting(false);
+            if (roundNumber >= totalRnds) {
+              setAllComplete(true);
             } else {
-              // Normal flow — switch to grouped summary view
-              setRevealedWinners(winnersList);
-              setState('reveal');
-
-              if (channelRef.current) {
-                channelRef.current.postMessage({ type: 'round_complete', roundNumber });
-              }
-
-              // Wait 7s then either exit to intermission or complete
-              exitTimeoutRef.current = setTimeout(() => {
-                exitTimeoutRef.current = null;
-                setIsExiting(true);
-                transitionTimeoutRef.current = setTimeout(() => {
-                  transitionTimeoutRef.current = null;
-                  setIsExiting(false);
-                  if (roundNumber >= totalRnds) {
-                    setAllComplete(true);
-                  } else {
-                    setNextRound(roundNumber + 1);
-                    setState('intermission');
-                  }
-                }, 700);
-              }, stageModRef.current.roundTimeout * 1000);
+              setNextRound(roundNumber + 1);
+              setState('intermission');
             }
-          }
-        };
+          }, 700);
+        }, stageModRef.current.roundTimeout * 1000);
+      } else {
+        // Normal flow — switch to grouped summary view
+        setRevealedWinners(winnersList);
+        setState('reveal');
 
-        showNext(0);
+        if (channelRef.current) {
+          channelRef.current.postMessage({ type: 'round_complete', roundNumber });
+        }
+
+        exitTimeoutRef.current = setTimeout(() => {
+          exitTimeoutRef.current = null;
+          setIsExiting(true);
+          transitionTimeoutRef.current = setTimeout(() => {
+            transitionTimeoutRef.current = null;
+            setIsExiting(false);
+            if (roundNumber >= totalRnds) {
+              setAllComplete(true);
+            } else {
+              setNextRound(roundNumber + 1);
+              setState('intermission');
+            }
+          }, 700);
+        }, stageModRef.current.roundTimeout * 1000);
       }
-    }, 50);
+    };
+
+    // Reveal a single winner card, then either continue or wrap up.
+    const revealOne = (idx) => {
+      if (revealCancelRef.current) return;
+      stopRolling();
+      setState('revealing');
+      setCurrentRevealingWinner({ ...winnersList[idx], activeFields });
+
+      revealTimerRef.current = setTimeout(() => {
+        const nextIdx = idx + 1;
+        if (nextIdx < winnersList.length) {
+          if (manual) {
+            startRollingFor(nextIdx);
+          } else {
+            revealOne(nextIdx);
+          }
+        } else {
+          finishRound();
+        }
+      }, stageModRef.current.cardDelay * 1000);
+    };
+
+    // Begin (or continue) rolling. In manual mode the loop never auto-stops —
+    // it waits for an `identify_winner` broadcast that calls revealOne(idx).
+    const startRollingFor = (idx) => {
+      if (revealCancelRef.current) return;
+      setState('rolling');
+      if (manual) {
+        pendingManualIdxRef.current = idx;
+        // Snapshot the current idx so the broadcast handler reveals THIS one
+        // even if startRollingFor is later re-entered for a later index.
+        const targetIdx = idx;
+        manualAdvanceRef.current = () => {
+          if (revealCancelRef.current) return;
+          if (pendingManualIdxRef.current !== targetIdx) return;
+          pendingManualIdxRef.current = -1;
+          manualAdvanceRef.current = null;
+          revealOne(targetIdx);
+        };
+      } else {
+        pendingManualIdxRef.current = -1;
+        manualAdvanceRef.current = null;
+      }
+      let rollCount = 0;
+      rollingIntervalRef.current = setInterval(() => {
+        rollCount++;
+        const randomIdx = Math.floor(Math.random() * namePool.length);
+        setRollingName(namePool[randomIdx]);
+        if (!manual && rollCount >= totalRolls) {
+          revealOne(idx);
+        }
+      }, 50);
+    };
+
+    startRollingFor(0);
   }, [stopRolling]);
 
   useEffect(() => {
@@ -241,6 +280,13 @@ export default function LuckyDrawStage() {
 
     channelRef.current.onmessage = (event) => {
       const { type, roundNumber, roundName, totalRounds: total, winners: winnersList } = event.data;
+
+      if (type === 'identify_winner') {
+        if (typeof manualAdvanceRef.current === 'function') {
+          manualAdvanceRef.current();
+        }
+        return;
+      }
 
       if (type === 'run_round') {
         clearPendingTimers();
@@ -269,12 +315,13 @@ export default function LuckyDrawStage() {
               };
               const smEnabled = data.exp_stage_mod_enabled === '1';
               const smConfig = {
-                enabled:       smEnabled,
-                noGroup:       smEnabled && data.exp_stage_mod_no_group === '1',
-                fx:            smEnabled && data.exp_stage_mod_fx      === '1',
-                cardDelay:     smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
-                roundTimeout:  smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
-                suspenseDelay: smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
+                enabled:        smEnabled,
+                noGroup:        smEnabled && data.exp_stage_mod_no_group        === '1',
+                fx:             smEnabled && data.exp_stage_mod_fx              === '1',
+                manualSuspense: smEnabled && data.exp_stage_mod_manual_suspense === '1',
+                cardDelay:      smEnabled ? (parseFloat(data.exp_transition_card_delay)     || 2.5) : 2.5,
+                roundTimeout:   smEnabled ? (parseFloat(data.exp_transition_round_timeout)  || 7.0) : 7.0,
+                suspenseDelay:  smEnabled ? (parseFloat(data.exp_transition_suspense_delay) || 3.0) : 3.0,
               };
               stageModRef.current = smConfig;
               setStageModState(smConfig);
@@ -520,9 +567,14 @@ export default function LuckyDrawStage() {
         }
 
         /* Reveal summary */
+        /* No overflow:hidden here — the fall-and-fade exit animation translates
+           the children downward by ~55px, and clipping at this container's
+           content-bound bottom edge produces a visible hard line just below
+           screen-center. Inner .winners-display still has its own scroll
+           containment, and .stage-container clips at the actual viewport. */
         .stage-reveal {
           display: flex; flex-direction: column; align-items: center;
-          gap: 1rem; width: 100%; max-height: 100vh; overflow: hidden;
+          gap: 1rem; width: 100%; max-height: 100vh;
         }
         .stage-reveal .round-label {
           font-family: var(--font-header); font-size: 2.5rem;

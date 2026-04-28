@@ -185,6 +185,7 @@ const UNPROTECTED_CONFIG_KEYS = new Set([
   // Stage Modification
   'exp_stage_mod_enabled',
   'exp_stage_mod_no_group',
+  'exp_stage_mod_manual_suspense',
   'exp_transition_card_delay',
   'exp_transition_round_timeout',
   'exp_transition_suspense_delay',
@@ -285,14 +286,15 @@ router.put('/', auth, (req, res) => {
 
     const EXP_WINNER_KEYS      = ['exp_winner_card_enabled', 'exp_winner_card_field1', 'exp_winner_card_field2', 'exp_winner_card_field3', 'exp_winner_card_field4'];
     const EXP_STAGE_MOD_KEYS   = ['exp_stage_mod_enabled', 'exp_stage_mod_no_group'];
+    const EXP_MANUAL_SUSP_KEYS = ['exp_stage_mod_manual_suspense'];
     const EXP_TRANSITION_KEYS  = ['exp_transition_card_delay', 'exp_transition_round_timeout', 'exp_transition_suspense_delay'];
     const EXP_FONT_KEYS        = ['exp_font_enabled', 'exp_font_header_id', 'exp_font_body_id'];
-    const hasExpKey = [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS].some(k => k in updates);
+    const hasExpKey = [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_MANUAL_SUSP_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS].some(k => k in updates);
 
     if (hasExpKey) {
       // Read old stored values for all exp keys in this update
       const expOld = {};
-      for (const k of [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS]) {
+      for (const k of [...EXP_WINNER_KEYS, ...EXP_STAGE_MOD_KEYS, ...EXP_MANUAL_SUSP_KEYS, ...EXP_TRANSITION_KEYS, ...EXP_FONT_KEYS]) {
         const row = db.prepare('SELECT value FROM config WHERE key = ?').get(k);
         expOld[k] = row ? row.value : '';
       }
@@ -312,11 +314,19 @@ router.put('/', auth, (req, res) => {
         }));
       }
 
-      // Stage Mod — Disable Grouped Winners: log if master toggle or no_group changed
-      if (EXP_STAGE_MOD_KEYS.some(k => k in updates && String(updates[k]) !== expOld[k])) {
+      // Stage Mod — Disable Grouped Winners: log only when no_group itself changed
+      if ('exp_stage_mod_no_group' in updates && String(updates['exp_stage_mod_no_group']) !== expOld['exp_stage_mod_no_group']) {
         expAudit.run('stage_mod_no_group_changed', JSON.stringify({
           enabled:  String(updates['exp_stage_mod_enabled']  ?? expOld['exp_stage_mod_enabled'])  === '1',
           no_group: String(updates['exp_stage_mod_no_group'] ?? expOld['exp_stage_mod_no_group']) === '1',
+        }));
+      }
+
+      // Stage Mod — Manual Suspense: log only when the toggle itself changed
+      if ('exp_stage_mod_manual_suspense' in updates && String(updates['exp_stage_mod_manual_suspense']) !== expOld['exp_stage_mod_manual_suspense']) {
+        expAudit.run('stage_mod_manual_suspense_changed', JSON.stringify({
+          enabled:         String(updates['exp_stage_mod_enabled']        ?? expOld['exp_stage_mod_enabled'])        === '1',
+          manual_suspense: String(updates['exp_stage_mod_manual_suspense'] ?? expOld['exp_stage_mod_manual_suspense']) === '1',
         }));
       }
 

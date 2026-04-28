@@ -231,16 +231,17 @@ function HomeScreenChangesBody() {
 // ── Registration Changes ── helpers ──────────────────────────────────────────
 
 const ACTION_LABELS = {
-  registration_opened:      'Registration Opened',
-  registration_closed:      'Registration Closed',
-  validation_uploaded:      'Validation Table Uploaded',
-  bulk_registration:        'Bulk Registration',
-  validation_entry_added:   'Validation Entry Added',
-  validation_entry_selected:'Validation Entry Selected',
-  validation_deleted:       'Validation Table Deleted',
-  registration_deleted:     'Registration Table Deleted',
-  validation_downloaded:    'Validation Table Downloaded',
-  registration_downloaded:  'Registration Table Downloaded',
+  registration_opened:       'Registration Opened',
+  registration_closed:       'Registration Closed',
+  validation_uploaded:       'Validation Table Uploaded',
+  bulk_registration:         'Bulk Registration',
+  validation_entry_added:    'Validation Entry Added',
+  validation_entry_selected: 'Validation Entry Selected',
+  validation_deleted:        'Validation Table Deleted',
+  registration_deleted:      'Registration Table Deleted',
+  validation_downloaded:     'Validation Table Downloaded',
+  registration_downloaded:   'Registration Table Downloaded',
+  exclusion_policy_modified: 'Exclusion Policy Modified',
 };
 
 function RegActionDetail({ row, onBack }) {
@@ -313,6 +314,26 @@ function RegActionDetail({ row, onBack }) {
         </div>
       );
       break;
+    case 'exclusion_policy_modified': {
+      const tags = Array.isArray(details.tags) ? details.tags : [];
+      const changeLabel = details.change === 'added'   ? 'Policy Added'
+                        : details.change === 'removed' ? 'Policy Removed'
+                        : 'Policy Modified';
+      content = (
+        <div className="audit-detail-block">
+          <div className="audit-detail-row"><span>Changed At</span><span>{ts}</span></div>
+          <div className="audit-detail-row"><span>Action</span><span>{changeLabel}</span></div>
+          <div className="audit-detail-row"><span>Prize ID</span><span>{details.prize_id || '—'}</span></div>
+          <div className="audit-detail-row"><span>Prize Name</span><span>{details.prize_name || '—'}</span></div>
+          <div className="audit-detail-row"><span>Category</span><span>{details.category_label || details.category || '—'}</span></div>
+          <div className="audit-detail-row">
+            <span>Tags</span>
+            <span>{tags.length > 0 ? tags.join(', ') : <span style={{ opacity: 0.5 }}>—</span>}</span>
+          </div>
+        </div>
+      );
+      break;
+    }
     default:
       content = (
         <div className="audit-detail-block">
@@ -585,6 +606,7 @@ const WINNER_CARD_FIELD_LABELS = {
 const EXP_ACTION_LABELS = {
   winner_card_changed:                'Winner Card Changes',
   stage_mod_no_group_changed:         'Disable Grouped Winners',
+  stage_mod_manual_suspense_changed:  'Manual Suspense',
   stage_mod_transitions_changed:      'Transition Adjustments',
   font_header_changed:                'Header Font Changes',
   font_body_changed:                  'Paragraph Font Changes',
@@ -627,6 +649,15 @@ function ExpActionDetail({ row, onBack }) {
           <div className="audit-detail-row"><span>Changed At</span><span>{ts}</span></div>
           <div className="audit-detail-row"><span>Global Toggle</span><span>{onOff(details.enabled)}</span></div>
           <div className="audit-detail-row"><span>Disable Grouped Winners</span><span>{onOff(details.no_group)}</span></div>
+        </div>
+      );
+      break;
+    case 'stage_mod_manual_suspense_changed':
+      content = (
+        <div className="audit-detail-block">
+          <div className="audit-detail-row"><span>Changed At</span><span>{ts}</span></div>
+          <div className="audit-detail-row"><span>Global Toggle</span><span>{onOff(details.enabled)}</span></div>
+          <div className="audit-detail-row"><span>Manual Suspense</span><span>{onOff(details.manual_suspense)}</span></div>
         </div>
       );
       break;

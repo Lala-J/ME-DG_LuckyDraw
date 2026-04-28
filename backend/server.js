@@ -7,8 +7,10 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const https = require('https');
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 const { initDatabase, getDb } = require('./db');
 const { broadcastStatusChange } = require('./events');
+const { JWT_SECRET, ADMIN_COOKIE_NAME } = require('./middleware/auth');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -183,12 +185,31 @@ async function startServer() {
     legacyHeaders: false
   });
 
+  // Skip the rate limiter for callers that already hold a valid admin
+  // session token. Many admin actions re-prompt for the password (e.g.
+  // configure prizes, redraw, secure config writes) and would otherwise
+  // burn the budget that exists to protect *unauthenticated* attackers.
+  // We strictly require a current, signature-valid admin JWT — anything
+  // missing/expired/wrong-type falls through to the rate limiter and is
+  // counted normally, so brute-force resistance is preserved.
+  const skipIfAuthenticatedAdmin = (req) => {
+    const token = req.cookies?.[ADMIN_COOKIE_NAME];
+    if (!token) return false;
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+      return decoded?.type === 'admin';
+    } catch {
+      return false;
+    }
+  };
+
   const adminLoginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
     message: { error: 'Too many login attempts. Please try again later.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    skip: skipIfAuthenticatedAdmin,
   });
 
   // Prevents rapid token harvesting from the OAuth error path.

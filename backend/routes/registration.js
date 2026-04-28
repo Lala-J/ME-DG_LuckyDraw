@@ -257,13 +257,14 @@ registrationRouter.post('/', async (req, res) => {
         return { status: 400, body: { success: false, message: 'This staff member is already registered.' } };
       }
 
-      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)').run(
+      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
         validationRow.full_name,
         validationRow.staff_id,
         validationRow.phone_number,
         validationRow.title || '',
         validationRow.department || '',
-        validationRow.location || ''
+        validationRow.location || '',
+        validationRow.employment_type || ''
       );
       db.prepare('INSERT INTO audit_manual_registrations (status, full_name, phone_number, ip_address) VALUES (?, ?, ?, ?)').run(
         'validated',
@@ -315,9 +316,9 @@ registrationRouter.get('/table', auth, (req, res) => {
 registrationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number, prize_winner_mark, registered_at, title, department, location FROM registration_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, prize_winner_mark, registered_at, title, department, location, employment_type FROM registration_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id', 'phone_number', 'prize_winner_mark', 'registered_at', 'title', 'department', 'location']
+      header: ['full_name', 'staff_id', 'phone_number', 'prize_winner_mark', 'registered_at', 'title', 'department', 'location', 'employment_type']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
@@ -327,6 +328,7 @@ registrationRouter.get('/download', auth, (req, res) => {
     ws['F1'] = { v: 'Title', t: 's' };
     ws['G1'] = { v: 'Department', t: 's' };
     ws['H1'] = { v: 'Location', t: 's' };
+    ws['I1'] = { v: 'Employment Type', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
@@ -374,17 +376,18 @@ registrationRouter.post('/clear', auth, (req, res) => {
 registrationRouter.post('/add-entry', auth, (req, res) => {
   try {
     const db = getDb();
-    const { full_name, staff_id, phone_number, title, department, location } = req.body;
+    const { full_name, staff_id, phone_number, title, department, location, employment_type } = req.body;
     if (!full_name || !staff_id) {
       return res.status(400).json({ error: 'Full name and staff ID are required' });
     }
-    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)').run(
+    const result = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       full_name.trim(),
       staff_id.trim(),
       (phone_number || '').trim(),
       (title || '').trim(),
       (department || '').trim(),
-      (location || '').trim()
+      (location || '').trim(),
+      (employment_type || '').trim()
     );
     if (result.changes === 0) {
       return res.status(400).json({ error: 'Staff ID is already registered' });
@@ -440,9 +443,9 @@ validationRouter.get('/table', auth, (req, res) => {
 validationRouter.get('/download', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location FROM validation_table ORDER BY id ASC').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location, employment_type FROM validation_table ORDER BY id ASC').all();
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['full_name', 'staff_id', 'phone_number', 'title', 'department', 'location']
+      header: ['full_name', 'staff_id', 'phone_number', 'title', 'department', 'location', 'employment_type']
     });
     ws['A1'] = { v: 'Full Name', t: 's' };
     ws['B1'] = { v: 'Staff ID', t: 's' };
@@ -450,6 +453,7 @@ validationRouter.get('/download', auth, (req, res) => {
     ws['D1'] = { v: 'Title', t: 's' };
     ws['E1'] = { v: 'Department', t: 's' };
     ws['F1'] = { v: 'Location', t: 's' };
+    ws['G1'] = { v: 'Employment Type', t: 's' };
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Validation');
@@ -525,10 +529,14 @@ validationRouter.post('/upload', auth, (req, res) => {
       if (!locationCol) locationCol = keys.find(k => k.toLowerCase().includes('location'));
       if (!locationCol) locationCol = keys.find(k => k.toLowerCase().includes('office') && k !== nameCol);
 
+      // Detect optional Employment Type column
+      let employmentCol = keys.find(k => k.toLowerCase().replace(/[^a-z]/g, '') === 'employmenttype');
+      if (!employmentCol) employmentCol = keys.find(k => k.toLowerCase().includes('employment'));
+
       const insertMany = db.transaction((rows) => {
         db.prepare('DELETE FROM validation_table').run();
         db.prepare("DELETE FROM sqlite_sequence WHERE name = 'validation_table'").run();
-        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)');
+        const insert = db.prepare('INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)');
         let insertedCount = 0;
         for (const row of rows) {
           const name = String(row[nameCol]).trim();
@@ -537,8 +545,9 @@ validationRouter.post('/upload', auth, (req, res) => {
           const title = titleCol ? String(row[titleCol] || '').trim() : '';
           const dept = deptCol ? String(row[deptCol] || '').trim() : '';
           const loc = locationCol ? String(row[locationCol] || '').trim() : '';
+          const emp = employmentCol ? String(row[employmentCol] || '').trim() : '';
           if (name && sid) {
-            insert.run(name, sid, phone, title, dept, loc);
+            insert.run(name, sid, phone, title, dept, loc, emp);
             insertedCount++;
           }
         }
@@ -587,10 +596,10 @@ validationRouter.post('/clear', auth, (req, res) => {
 validationRouter.post('/to-registration', auth, (req, res) => {
   try {
     const db = getDb();
-    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location FROM validation_table').all();
+    const rows = db.prepare('SELECT full_name, staff_id, phone_number, title, department, location, employment_type FROM validation_table').all();
 
     const copyAll = db.transaction((entries) => {
-      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)');
+      const insert = db.prepare('INSERT OR IGNORE INTO registration_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)');
       let inserted = 0;
       for (const row of entries) {
         const result = insert.run(
@@ -599,7 +608,8 @@ validationRouter.post('/to-registration', auth, (req, res) => {
           row.phone_number || '',
           row.title || '',
           row.department || '',
-          row.location || ''
+          row.location || '',
+          row.employment_type || ''
         );
         if (result.changes > 0) inserted++;
       }
@@ -624,13 +634,13 @@ validationRouter.put('/entry/:id', auth, (req, res) => {
     const entryId = parseInt(req.params.id, 10);
     if (!entryId) return res.status(400).json({ error: 'Invalid entry ID.' });
 
-    const { full_name, staff_id, phone_number, title, department, location } = req.body;
+    const { full_name, staff_id, phone_number, title, department, location, employment_type } = req.body;
     if (!full_name || !phone_number) {
       return res.status(400).json({ error: 'Full Name and Phone Number are required.' });
     }
 
     const result = db.prepare(
-      'UPDATE validation_table SET full_name=?, staff_id=?, phone_number=?, title=?, department=?, location=? WHERE id=?'
+      'UPDATE validation_table SET full_name=?, staff_id=?, phone_number=?, title=?, department=?, location=?, employment_type=? WHERE id=?'
     ).run(
       full_name.trim(),
       (staff_id || '').trim(),
@@ -638,6 +648,7 @@ validationRouter.put('/entry/:id', auth, (req, res) => {
       (title || '').trim(),
       (department || '').trim(),
       (location || '').trim(),
+      (employment_type || '').trim(),
       entryId
     );
 
@@ -654,30 +665,32 @@ validationRouter.put('/entry/:id', auth, (req, res) => {
 validationRouter.post('/entry', auth, (req, res) => {
   try {
     const db = getDb();
-    const { full_name, staff_id, phone_number, title, department, location } = req.body;
+    const { full_name, staff_id, phone_number, title, department, location, employment_type } = req.body;
 
     if (!full_name || !phone_number) {
       return res.status(400).json({ error: 'Full Name and Phone Number are required.' });
     }
 
     const trimmedEntry = {
-      full_name:    full_name.trim(),
-      staff_id:     (staff_id || '').trim(),
-      phone_number: phone_number.trim(),
-      title:        (title || '').trim(),
-      department:   (department || '').trim(),
-      location:     (location || '').trim(),
+      full_name:       full_name.trim(),
+      staff_id:        (staff_id || '').trim(),
+      phone_number:    phone_number.trim(),
+      title:           (title || '').trim(),
+      department:      (department || '').trim(),
+      location:        (location || '').trim(),
+      employment_type: (employment_type || '').trim(),
     };
 
     db.prepare(
-      'INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO validation_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(
       trimmedEntry.full_name,
       trimmedEntry.staff_id,
       trimmedEntry.phone_number,
       trimmedEntry.title,
       trimmedEntry.department,
-      trimmedEntry.location
+      trimmedEntry.location,
+      trimmedEntry.employment_type
     );
 
     db.prepare('INSERT INTO audit_reg_changes (action_type, details) VALUES (?, ?)').run(

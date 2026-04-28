@@ -136,7 +136,8 @@ async function initDatabase() {
       phone_number TEXT NOT NULL DEFAULT '',
       title TEXT DEFAULT '',
       department TEXT DEFAULT '',
-      location TEXT DEFAULT ''
+      location TEXT DEFAULT '',
+      employment_type TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS registration_table (
@@ -148,7 +149,8 @@ async function initDatabase() {
       registered_at TEXT DEFAULT (datetime('now')),
       title TEXT DEFAULT '',
       department TEXT DEFAULT '',
-      location TEXT DEFAULT ''
+      location TEXT DEFAULT '',
+      employment_type TEXT DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS lucky_draw_rounds (
@@ -249,6 +251,14 @@ async function initDatabase() {
       details TEXT NOT NULL DEFAULT '{}',
       changed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS prize_exclusion_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prize_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      UNIQUE(prize_id, category)
+    );
   `);
 
   // Seed default admin if none exists
@@ -283,6 +293,7 @@ async function initDatabase() {
     exp_winner_card_field4:         'disabled',
     exp_stage_mod_enabled:          '0',
     exp_stage_mod_no_group:         '0',
+    exp_stage_mod_manual_suspense:  '0',
     exp_transition_card_delay:      '2.5',
     exp_transition_round_timeout:   '7.0',
     exp_transition_suspense_delay:  '3.0',
@@ -336,6 +347,16 @@ async function initDatabase() {
   }
   if (!registrationColsV2.find(c => c.name === 'location')) {
     db.exec("ALTER TABLE registration_table ADD COLUMN location TEXT DEFAULT ''");
+  }
+
+  // Migrations: add employment_type to validation_table & registration_table
+  const validationColsV3 = db.prepare('PRAGMA table_info(validation_table)').all();
+  if (!validationColsV3.find(c => c.name === 'employment_type')) {
+    db.exec("ALTER TABLE validation_table ADD COLUMN employment_type TEXT DEFAULT ''");
+  }
+  const registrationColsV3 = db.prepare('PRAGMA table_info(registration_table)').all();
+  if (!registrationColsV3.find(c => c.name === 'employment_type')) {
+    db.exec("ALTER TABLE registration_table ADD COLUMN employment_type TEXT DEFAULT ''");
   }
 
   // Migrations: add custom_name to lucky_draw_rounds
@@ -413,6 +434,14 @@ async function initDatabase() {
       action_type TEXT NOT NULL,
       details TEXT NOT NULL DEFAULT '{}',
       changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS prize_exclusion_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prize_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
+      UNIQUE(prize_id, category)
     );
   `);
 

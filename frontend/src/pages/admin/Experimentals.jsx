@@ -411,6 +411,7 @@ function StageModModal({ onClose, getAuthHeaders }) {
   const [visible, setVisible] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [noGroup, setNoGroup] = useState(false);
+  const [manualSuspense, setManualSuspense] = useState(false);
   const [cardDelay, setCardDelay] = useState(2.5);
   const [roundTimeout, setRoundTimeout] = useState(7.0);
   const [suspenseDelay, setSuspenseDelay] = useState(3.0);
@@ -427,6 +428,7 @@ function StageModModal({ onClose, getAuthHeaders }) {
         if (!data) return;
         setEnabled(data.exp_stage_mod_enabled === '1');
         setNoGroup(data.exp_stage_mod_no_group === '1');
+        setManualSuspense(data.exp_stage_mod_manual_suspense === '1');
         setCardDelay(parseFloat(data.exp_transition_card_delay) || 2.5);
         setRoundTimeout(parseFloat(data.exp_transition_round_timeout) || 7.0);
         setSuspenseDelay(parseFloat(data.exp_transition_suspense_delay) || 3.0);
@@ -434,13 +436,14 @@ function StageModModal({ onClose, getAuthHeaders }) {
       .catch(() => {});
   }, []);
 
-  const saveConfig = useCallback((newEnabled, newNoGroup, newCardDelay, newRoundTimeout, newSuspenseDelay) => {
+  const saveConfig = useCallback((newEnabled, newNoGroup, newManualSuspense, newCardDelay, newRoundTimeout, newSuspenseDelay) => {
     fetch('/api/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
-        exp_stage_mod_enabled:          newEnabled  ? '1' : '0',
-        exp_stage_mod_no_group:         newNoGroup  ? '1' : '0',
+        exp_stage_mod_enabled:          newEnabled         ? '1' : '0',
+        exp_stage_mod_no_group:         newNoGroup         ? '1' : '0',
+        exp_stage_mod_manual_suspense:  newManualSuspense  ? '1' : '0',
         exp_transition_card_delay:      String(newCardDelay),
         exp_transition_round_timeout:   String(newRoundTimeout),
         exp_transition_suspense_delay:  String(newSuspenseDelay),
@@ -451,19 +454,25 @@ function StageModModal({ onClose, getAuthHeaders }) {
   const handleMasterToggle = () => {
     const next = !enabled;
     setEnabled(next);
-    saveConfig(next, noGroup, cardDelay, roundTimeout, suspenseDelay);
+    saveConfig(next, noGroup, manualSuspense, cardDelay, roundTimeout, suspenseDelay);
   };
 
   const handleNoGroupToggle = () => {
     const next = !noGroup;
     setNoGroup(next);
-    saveConfig(enabled, next, cardDelay, roundTimeout, suspenseDelay);
+    saveConfig(enabled, next, manualSuspense, cardDelay, roundTimeout, suspenseDelay);
+  };
+
+  const handleManualSuspenseToggle = () => {
+    const next = !manualSuspense;
+    setManualSuspense(next);
+    saveConfig(enabled, noGroup, next, cardDelay, roundTimeout, suspenseDelay);
   };
 
   const handleDelayBlur = (setter, defaultVal, otherVals) => (e) => {
     const v = Math.max(0.1, parseFloat(e.target.value) || defaultVal);
     setter(v);
-    saveConfig(enabled, noGroup, ...otherVals(v));
+    saveConfig(enabled, noGroup, manualSuspense, ...otherVals(v));
   };
 
   const close = () => { setVisible(false); setTimeout(onClose, 300); };
@@ -528,6 +537,31 @@ function StageModModal({ onClose, getAuthHeaders }) {
                 </div>
               </div>
 
+              <div className="exp-option-row">
+                <div className="exp-option-left">
+                  <h4>Manual Suspense</h4>
+                  <p>
+                    When enabled, every round&apos;s suspense phase requires a manual action by the Admin
+                    to reveal each winner. The Roulette Stage will keep rolling names until you press
+                    the &ldquo;Identify Winner&rdquo; button — which appears in place of &ldquo;Run Roulette&rdquo; once a
+                    round has started — at which point the Winner Card is finally displayed.
+                  </p>
+                  <p>
+                    While this option is on, the &ldquo;Suspense Delay&rdquo; field below has no effect and is
+                    grayed out, since the suspense duration is now controlled entirely by the Admin.
+                  </p>
+                </div>
+                <div className="exp-option-right">
+                  <span className={`exp-toggle-label-text${manualSuspense ? ' exp-toggle-label-text--on' : ''}`}>
+                    {manualSuspense ? 'ON' : 'OFF'}
+                  </span>
+                  <label className="exp-toggle-switch" title={manualSuspense ? 'Turn off' : 'Turn on'}>
+                    <input type="checkbox" checked={manualSuspense} onChange={handleManualSuspenseToggle} disabled={!enabled} />
+                    <span className="exp-toggle-slider" />
+                  </label>
+                </div>
+              </div>
+
               <div className="exp-option-row exp-transition-row">
                 <div className="exp-option-left">
                   <h4>Transition Adjustments</h4>
@@ -552,10 +586,11 @@ function StageModModal({ onClose, getAuthHeaders }) {
                       <span className="exp-transition-unit">s</span>
                     </div>
                   </div>
-                  <div className="exp-transition-input-row">
+                  <div className={`exp-transition-input-row${manualSuspense ? ' exp-transition-input-row--disabled' : ''}`}
+                       title={manualSuspense ? 'Disabled while Manual Suspense is on' : ''}>
                     <span className="exp-transition-label">Suspense Delay</span>
                     <div className="exp-transition-control">
-                      <input type="number" min="0.1" step="0.1" className="exp-transition-number" value={suspenseDelay} disabled={!enabled}
+                      <input type="number" min="0.1" step="0.1" className="exp-transition-number" value={suspenseDelay} disabled={!enabled || manualSuspense}
                         onChange={(e) => setSuspenseDelay(e.target.value)}
                         onBlur={handleDelayBlur(setSuspenseDelay, 3.0, (v) => [cardDelay, roundTimeout, v])} />
                       <span className="exp-transition-unit">s</span>

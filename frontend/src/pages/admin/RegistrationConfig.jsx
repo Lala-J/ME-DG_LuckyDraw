@@ -197,7 +197,7 @@ function ValidationFullViewModal({
   // Edit / add panel state
   const [editMode, setEditMode] = useState(null); // null | 'edit' | 'add'
   const [editRow,  setEditRow]  = useState(null);
-  const EMPTY_FORM = { full_name: '', staff_id: '', phone_number: '', title: '', department: '', location: '' };
+  const EMPTY_FORM = { full_name: '', staff_id: '', phone_number: '', title: '', department: '', location: '', employment_type: '' };
   const [form,    setForm]    = useState(EMPTY_FORM);
   const [saving,  setSaving]  = useState(false);
   const [editMsg, setEditMsg] = useState(null);
@@ -214,12 +214,13 @@ function ValidationFullViewModal({
   const openEdit = (row) => {
     setEditRow(row);
     setForm({
-      full_name:    row.full_name    || '',
-      staff_id:     row.staff_id     || '',
-      phone_number: row.phone_number || '',
-      title:        row.title        || '',
-      department:   row.department   || '',
-      location:     row.location     || '',
+      full_name:       row.full_name       || '',
+      staff_id:        row.staff_id        || '',
+      phone_number:    row.phone_number    || '',
+      title:           row.title           || '',
+      department:      row.department      || '',
+      location:        row.location        || '',
+      employment_type: row.employment_type || '',
     });
     setEditMsg(null);
     setEditMode('edit');
@@ -290,12 +291,13 @@ function ValidationFullViewModal({
   };
 
   const FIELDS = [
-    { key: 'full_name',    label: 'Full Name',    required: true  },
-    { key: 'staff_id',     label: 'Staff ID',     required: false },
-    { key: 'phone_number', label: 'Phone Number', required: true  },
-    { key: 'title',        label: 'Title',        required: false },
-    { key: 'department',   label: 'Department',   required: false },
-    { key: 'location',     label: 'Location',     required: false },
+    { key: 'full_name',       label: 'Full Name',       required: true  },
+    { key: 'staff_id',        label: 'Staff ID',        required: false },
+    { key: 'phone_number',    label: 'Phone Number',    required: true  },
+    { key: 'title',           label: 'Title',           required: false },
+    { key: 'department',      label: 'Department',      required: false },
+    { key: 'location',        label: 'Location',        required: false },
+    { key: 'employment_type', label: 'Employment Type', required: false },
   ];
 
   return (
@@ -841,7 +843,8 @@ export default function RegistrationConfig() {
     { key: 'phone_number', label: 'Phone Number' },
     { key: 'title', label: 'Title' },
     { key: 'department', label: 'Department' },
-    { key: 'location', label: 'Location' }
+    { key: 'location', label: 'Location' },
+    { key: 'employment_type', label: 'Employment Type' }
   ];
 
   const registrationPopupColumns = [
@@ -853,7 +856,8 @@ export default function RegistrationConfig() {
     { key: 'registered_at', label: 'Registered' },
     { key: 'title', label: 'Title' },
     { key: 'department', label: 'Department' },
-    { key: 'location', label: 'Location' }
+    { key: 'location', label: 'Location' },
+    { key: 'employment_type', label: 'Employment Type' }
   ];
 
   const renderMainTable = (rows, columns, startIndex) => {

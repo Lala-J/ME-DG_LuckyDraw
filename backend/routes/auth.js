@@ -268,10 +268,14 @@ router.get('/microsoft/callback', async (_req, res) => {
       if (existing) return 'err_dup';
 
       // Register — store data from validation_table, never from Graph API
-      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number) VALUES (?, ?, ?)').run(
+      db.prepare('INSERT INTO registration_table (full_name, staff_id, phone_number, title, department, location, employment_type) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
         validationRow.full_name,
         validationRow.staff_id,
-        validationRow.phone_number
+        validationRow.phone_number,
+        validationRow.title || '',
+        validationRow.department || '',
+        validationRow.location || '',
+        validationRow.employment_type || ''
       );
       db.prepare('INSERT INTO audit_azure_registrations (status, full_name, phone_number, email_address) VALUES (?, ?, ?, ?)').run(
         'validated',

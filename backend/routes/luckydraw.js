@@ -187,7 +187,28 @@ router.post('/run/:roundNumber', auth, (req, res) => {
     ).get(`%"round_number":${roundNumber},%`);
     const drawActionType = priorRun ? 'roulette_redrawn' : 'roulette_ran';
 
-    const actualCount = Math.min(roundPrizes.length, eligible.length);
+    // Load exclusion policies for the prizes in this round
+    const exclusionRows = db.prepare(
+      `SELECT prize_id, category, tags FROM prize_exclusion_policies WHERE prize_id IN (${roundPrizes.map(() => '?').join(',')})`
+    ).all(...roundPrizes.map(p => p.prize_id));
+    const exclusionsByPrize = {};
+    for (const row of exclusionRows) {
+      if (!exclusionsByPrize[row.prize_id]) exclusionsByPrize[row.prize_id] = [];
+      let tags;
+      try { tags = JSON.parse(row.tags || '[]'); } catch { tags = []; }
+      if (!Array.isArray(tags)) tags = [];
+      exclusionsByPrize[row.prize_id].push({ category: row.category, tags });
+    }
+
+    const isExcluded = (registrant, prizeId) => {
+      const policies = exclusionsByPrize[prizeId];
+      if (!policies || policies.length === 0) return false;
+      for (const p of policies) {
+        const v = registrant[p.category];
+        if (v != null && p.tags.includes(v)) return true;
+      }
+      return false;
+    };
 
     // Fisher-Yates shuffle participants (crypto.randomInt for fairness)
     const shuffledParticipants = [...eligible];
@@ -195,7 +216,6 @@ router.post('/run/:roundNumber', auth, (req, res) => {
       const j = crypto.randomInt(i + 1);
       [shuffledParticipants[i], shuffledParticipants[j]] = [shuffledParticipants[j], shuffledParticipants[i]];
     }
-    const selectedWinners = shuffledParticipants.slice(0, actualCount);
 
     // Fisher-Yates shuffle prizes (crypto.randomInt for fairness)
     const shuffledPrizes = [...roundPrizes];
@@ -204,28 +224,44 @@ router.post('/run/:roundNumber', auth, (req, res) => {
       [shuffledPrizes[i], shuffledPrizes[j]] = [shuffledPrizes[j], shuffledPrizes[i]];
     }
 
+    // Greedy assignment honouring exclusion policies: walk prizes in their
+    // shuffled order; pick the first eligible (still-available) participant
+    // for each. Excluded participants are skipped for that prize but remain
+    // available for prizes they aren't excluded from.
+    const remaining = [...shuffledParticipants];
+    const assignments = [];
+    for (const prize of shuffledPrizes) {
+      const idx = remaining.findIndex(r => !isExcluded(r, prize.prize_id));
+      if (idx === -1) continue;
+      const participant = remaining.splice(idx, 1)[0];
+      assignments.push({ winner: participant, prize });
+    }
+    const actualCount = assignments.length;
+
+    if (actualCount === 0) {
+      return res.status(400).json({ error: 'No eligible participants for the configured prizes (exclusion policies left no candidates).' });
+    }
+
     db.transaction(() => {
       const markWinner = db.prepare('UPDATE registration_table SET prize_winner_mark = ? WHERE id = ?');
       const insertResult = db.prepare('INSERT INTO lucky_draw_results (round_number, registration_id, full_name, staff_id, prize_id) VALUES (?, ?, ?, ?, ?)');
-      for (let i = 0; i < actualCount; i++) {
-        const winner = selectedWinners[i];
-        const prize = shuffledPrizes[i];
-        markWinner.run(prize.prize_id, winner.id);
-        insertResult.run(roundNumber, winner.id, winner.full_name, winner.staff_id, prize.prize_id);
+      for (const a of assignments) {
+        markWinner.run(a.prize.prize_id, a.winner.id);
+        insertResult.run(roundNumber, a.winner.id, a.winner.full_name, a.winner.staff_id, a.prize.prize_id);
       }
       db.prepare('UPDATE lucky_draw_rounds SET executed = 1 WHERE round_number = ?').run(roundNumber);
     })();
 
-    const resultWinners = selectedWinners.map((w, i) => ({
+    const resultWinners = assignments.map(({ winner: w, prize: p }) => ({
       registrationId: w.id,
       fullName: w.full_name,
       staffId: w.staff_id,
       title: w.title || '',
       department: w.department || '',
       location: w.location || '',
-      prizeId: shuffledPrizes[i].prize_id,
-      prizeName: shuffledPrizes[i].name,
-      prizePicture: shuffledPrizes[i].picture_filename ? `/api/prizes/${shuffledPrizes[i].prize_id}/picture` : null
+      prizeId: p.prize_id,
+      prizeName: p.name,
+      prizePicture: p.picture_filename ? `/api/prizes/${p.prize_id}/picture` : null
     }));
 
     db.prepare('INSERT INTO audit_draw_changes (action_type, details) VALUES (?, ?)').run(
