@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useConfig } from '../../contexts/ConfigContext';
 import Layout from '../../components/Layout';
 
 const FIELD_OPTIONS = [
@@ -629,6 +630,7 @@ function BackendOptionRow({ configKey, label, description, opts, setOpts, handle
 
 // Shared hook-style helper: builds opts state and a save handler for a backend modal.
 function useBackendOpts(keys, getAuthHeaders) {
+  const { refreshConfig } = useConfig();
   const initial = {};
   for (const k of keys) initial[k] = { val: false, pw: '', saving: false, msg: null };
   const [opts, setOpts] = useState(initial);
@@ -665,6 +667,9 @@ function useBackendOpts(keys, getAuthHeaders) {
       });
       if (res.ok) {
         setOpts(prev => ({ ...prev, [key]: { ...prev[key], saving: false, pw: '', msg: { type: 'success', text: 'Saved successfully.' } } }));
+        // Refresh the global config so other admin pages (e.g. Registration
+        // Master) react to the new flag value without a hard reload.
+        refreshConfig();
       } else {
         const data = await res.json().catch(() => ({}));
         setOpts(prev => ({ ...prev, [key]: { ...prev[key], saving: false, msg: { type: 'error', text: data.error || 'Failed to save.' } } }));
@@ -672,7 +677,7 @@ function useBackendOpts(keys, getAuthHeaders) {
     } catch {
       setOpts(prev => ({ ...prev, [key]: { ...prev[key], saving: false, msg: { type: 'error', text: 'Network error.' } } }));
     }
-  }, [opts, getAuthHeaders]);
+  }, [opts, getAuthHeaders, refreshConfig]);
 
   return { opts, setOpts, handleSave, configLoaded };
 }

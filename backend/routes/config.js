@@ -4,9 +4,25 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 const auth = require('../middleware/auth');
+const { JWT_SECRET, ADMIN_COOKIE_NAME } = auth;
 const { sanitizeAuditInput } = require('../utils/sanitize');
+
+// Returns true if the request carries a valid admin session cookie.
+// Used by GET /api/config to decide whether to include backend-only keys
+// (PRIVATE_CONFIG_KEYS) without rejecting unauthenticated public callers.
+function hasValidAdminSession(req) {
+  const token = req.cookies?.[ADMIN_COOKIE_NAME];
+  if (!token) return false;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return decoded.type === 'admin';
+  } catch {
+    return false;
+  }
+}
 
 // Keys tracked in the home-screen audit log and their display labels
 const AUDIT_FIELD_LABELS = {
@@ -58,14 +74,18 @@ const PRIVATE_CONFIG_KEYS = new Set([
   'exp_additional_entries',
 ]);
 
-// GET /api/config - public (backend experimental flags excluded)
+// GET /api/config - public for non-private keys; backend experimental flags
+// (PRIVATE_CONFIG_KEYS) are included only when the request carries a valid
+// admin session cookie. This lets the admin UI read its own saved state
+// without exposing those flags to unauthenticated visitors.
 router.get('/', (req, res) => {
   try {
     const db = getDb();
     const rows = db.prepare('SELECT key, value FROM config').all();
+    const includePrivate = hasValidAdminSession(req);
     const config = {};
     for (const row of rows) {
-      if (!PRIVATE_CONFIG_KEYS.has(row.key)) {
+      if (includePrivate || !PRIVATE_CONFIG_KEYS.has(row.key)) {
         config[row.key] = row.value;
       }
     }
